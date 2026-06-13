@@ -6,7 +6,7 @@
 - CLI: `creamlon submit`, `watch`, `deliver` (requires `GITHUB_TOKEN`)
 - Lib: `taskYaml`, `dedup`, `github` modules
 - Node acceptance: dedup via `proofs.log`, expiry checks
-- Templates: v0.2 agent.yaml, Issue template, GitHub Actions watch example
+- Templates: v0.2 agent.yaml, Issue template
 - Proof format unchanged (`v: "0.1"`)
 
 ## 0.1.0
