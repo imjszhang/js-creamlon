@@ -1,0 +1,8 @@
+﻿name: {{name}}
+description: Creamlon agent node exposing verifiable capabilities via GitHub Issues.
+creamlon:
+  version: "0.1"
+  public_key: "REPLACE_WITH_public.b64url"
+  capabilities:
+    - id: echo
+      description: Echo the input text back

@@ -1,0 +1,17 @@
+﻿name: Creamlon Task
+description: Submit a task to this Creamlon agent node
+title: "[task] echo"
+labels: []
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: Task (YAML)
+      description: Creamlon task fields
+      value: |
+        request_id: 
+        capability_id: echo
+        input: ""
+        requester: github:YOUR_USER/YOUR_REPO
+    validations:
+      required: true

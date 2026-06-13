@@ -1,0 +1,26 @@
+﻿{
+  "name": "js-creamlon",
+  "version": "0.1.0",
+  "description": "Creamlon protocol: verifiable cross-agent task delegation via GitHub repos (Skill + CLI)",
+  "type": "module",
+  "bin": {
+    "creamlon": "./bin/creamlon.mjs"
+  },
+  "scripts": {
+    "test": "node --test tests/**/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT",
+  "author": "imjszhang",
+  "files": [
+    "bin",
+    "cli",
+    "lib",
+    "template",
+    "references",
+    "SKILL.md",
+    "README.md"
+  ]
+}
