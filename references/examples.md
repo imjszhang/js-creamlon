@@ -1,4 +1,4 @@
-﻿# Creamlon v0.1 Walkthrough: Alice calls Bob
+﻿# Creamlon v0.2 Walkthrough: Alice calls Bob
 
 Alice wants Bob's `code_review` capability. Bob runs a personal agent locally; his public node repo is `bob/code-review-agent`.
 
@@ -21,7 +21,19 @@ Alice confirms `code_review` exists in `capabilities`.
 
 ## 3. Alice submits a task
 
-Alice opens an issue on `bob/code-review-agent`:
+**CLI (v0.2):**
+
+```bash
+export GITHUB_TOKEN=ghp_...
+creamlon submit bob/code-review-agent \
+  --capability-id code_review \
+  --input "https://github.com/alice/project/pull/42" \
+  --requester github:alice/my-agent \
+  --expires 2026-06-20T00:00:00Z \
+  --pretty
+```
+
+**Manual Issue** (same content):
 
 **Title:** `[task] code_review`
 
@@ -32,38 +44,25 @@ request_id: 550e8400-e29b-41d4-a716-446655440000
 capability_id: code_review
 input: "https://github.com/alice/project/pull/42"
 requester: github:alice/my-agent
+expires: 2026-06-20T00:00:00Z
 ```
 
-Or with `gh`:
+## 4. Bob watches and fulfills
 
 ```bash
-gh issue create --repo bob/code-review-agent \
-  --title "[task] code_review" \
-  --body "$(cat task.yaml)"
+creamlon watch bob/code-review-agent --repo-path ./code-review-agent --once --pretty
 ```
 
-## 4. Bob fulfills the task
-
-Bob sees the issue, runs his local agent on the PR, gets a review text.
+Bob runs his local agent on the PR, then delivers:
 
 ```bash
-INPUT_HASH=$(creamlon hash "https://github.com/alice/project/pull/42")
-OUTPUT_HASH=$(creamlon hash --file review.md)
-
-creamlon sign \
-  --request-id 550e8400-e29b-41d4-a716-446655440000 \
-  --capability-id code_review \
-  --input-hash "$INPUT_HASH" \
-  --output-hash "$OUTPUT_HASH" \
-  --key ./code-review-agent/.creamlon/private.key \
-  --pretty > proof.json
+creamlon deliver bob/code-review-agent 42 \
+  --repo-path ./code-review-agent \
+  --output-file review.md \
+  --pretty
 ```
 
-Bob:
-
-1. Comments on the issue with a short summary + `proof.json`
-2. Appends one line of `proof.json` to `trust/proofs.log`
-3. Commits, pushes, closes the issue
+This signs a proof, comments on the issue, appends `trust/proofs.log`, and closes the issue. Bob then commits and pushes.
 
 ## 5. Alice verifies delivery
 
@@ -72,8 +71,6 @@ creamlon verify --repo bob/code-review-agent --proof proof.json
 ```
 
 If output is `ok: true`, Alice trusts that Bob's node signed this delivery for the stated request.
-
-Alice can also read `trust/proofs.log` from GitHub for historical reputation.
 
 ## Hash-only input variant
 
@@ -86,4 +83,45 @@ input_hash: sha256:abc...
 requester: github:alice/my-agent
 ```
 
-Bob must use the **same** `input_hash` in the proof. The review output still goes in the issue comment; only the digest is signed.
+Bob must use the **same** `input_hash` in the proof.
+
+## Large file via URL (input_ref)
+
+```yaml
+request_id: ...
+capability_id: code_review
+input_ref:
+  type: url
+  value: "https://example.com/large-spec.pdf"
+requester: github:alice/my-agent
+```
+
+Proof `input_hash` is `creamlon hash` of the URL string.
+
+## Paid node (payment hook)
+
+Bob's `agent.yaml`:
+
+```yaml
+creamlon:
+  payment_required: true
+  payment_instructions: "Send 0.01 ETH to 0x...; embed request_id in tx data."
+```
+
+Alice submits with payment proof:
+
+```bash
+creamlon submit bob/code-review-agent \
+  --capability-id code_review \
+  --input-hash sha256:... \
+  --requester github:alice/my-agent \
+  --payment-json ./payment.json
+```
+
+`payment.json` example:
+
+```json
+{ "type": "evm", "txid": "0x..." }
+```
+
+Bob's node Skill verifies payment per `payment_instructions` before running `creamlon deliver`.

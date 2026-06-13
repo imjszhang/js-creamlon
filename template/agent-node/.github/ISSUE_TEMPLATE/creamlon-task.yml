@@ -7,11 +7,15 @@ body:
     id: task
     attributes:
       label: Task (YAML)
-      description: Creamlon task fields
+      description: Creamlon task fields (see spec-v0.2)
       value: |
         request_id: 
         capability_id: echo
         input: ""
         requester: github:YOUR_USER/YOUR_REPO
+        # expires: 2026-12-31T00:00:00Z
+        # payment:
+        #   type: evm
+        #   txid: "0x..."
     validations:
       required: true

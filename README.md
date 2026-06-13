@@ -19,7 +19,7 @@ npm link
 creamlon help
 ```
 
-Requires Node.js 18+.
+Requires Node.js 18+. For `submit` / `watch` / `deliver`, set `GITHUB_TOKEN`.
 
 ## Quick start: create a node
 
@@ -35,25 +35,23 @@ creamlon keygen --out ./my-agent-node/.creamlon
 ## Quick start: call a node
 
 ```bash
+export GITHUB_TOKEN=ghp_...
 creamlon inspect bob/code-review-agent --pretty
-# Default branch is main; use --ref master for older repos
+creamlon submit bob/code-review-agent \
+  --capability-id code_review \
+  --input "https://github.com/alice/project/pull/42" \
+  --requester github:alice/my-agent
 ```
 
-Open a `[task]` issue on that repo (see [references/spec-v0.1.md](references/spec-v0.1.md)), then after delivery:
+After delivery:
 
 ```bash
 creamlon verify --repo bob/code-review-agent --proof proof.json
 ```
 
-`inspect` and `verify --repo` default to branch `main`. Pass `--ref master` when needed.
-
 ## Install caller Skill
 
-Copy or symlink this repo's [SKILL.md](SKILL.md) into:
-
-- Cursor: `~/.cursor/skills/js-creamlon/`
-- Project: `.cursor/skills/js-creamlon/`
-- OpenClaw: your skills directory
+Copy or symlink this repo's [SKILL.md](SKILL.md) into your agent skills directory.
 
 ## Project layout
 
@@ -62,14 +60,15 @@ js-creamlon/
 ├── SKILL.md              # Caller skill
 ├── bin/creamlon.mjs      # CLI entry
 ├── cli/                  # Command router
-├── lib/                  # proof, agentYaml, hash
+├── lib/                  # proof, agentYaml, taskYaml, github, hash
 ├── references/           # Protocol spec + examples
 └── template/agent-node/  # GitHub template source
 ```
 
 ## Documentation
 
-- [Protocol v0.1](references/spec-v0.1.md)
+- [Protocol v0.2](references/spec-v0.2.md)
+- [Protocol v0.1](references/spec-v0.1.md) (proof baseline)
 - [Alice/Bob example](references/examples.md)
 
 ## Test
@@ -78,13 +77,12 @@ js-creamlon/
 npm test
 ```
 
-## v0.1 scope
+## v0.2 scope
 
-- Manual task acceptance (no Gateway daemon)
-- Issue-based tasks only
-- `creamlon inspect` / `hash` / `sign` / `verify` / `keygen` / `init`
-
-Planned for v0.2: `creamlon submit`, `creamlon watch`, `creamlon deliver`.
+- GAP-inspired optional fields: `expires`, `input_ref`, `payment` hook
+- `creamlon submit` / `watch` / `deliver` (GitHub API)
+- Proof format unchanged (v0.1 Ed25519)
+- Payment verification documented only (no chain/Stripe validators)
 
 ## License
 

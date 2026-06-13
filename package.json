@@ -1,6 +1,6 @@
 ﻿{
   "name": "js-creamlon",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Creamlon protocol: verifiable cross-agent task delegation via GitHub repos (Skill + CLI)",
   "type": "module",
   "bin": {
@@ -21,6 +21,7 @@
     "template",
     "references",
     "SKILL.md",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ]
 }
