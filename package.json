@@ -8,9 +8,11 @@
   },
   "scripts": {
     "test": "node --test tests/**/*.test.mjs",
-    "check": "node --check cli/index.mjs && npm test",
+    "check:version": "node scripts/sync-version.mjs --check",
+    "check": "npm run check:version && node --check cli/index.mjs && npm test",
     "coverage:security": "node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-include=lib/authorizationHmac.mjs --test-coverage-include=lib/proofComment.mjs --test tests/**/*.test.mjs",
-    "prepublishOnly": "npm run check && npm run coverage:security"
+    "prepublishOnly": "npm run check && npm run coverage:security",
+    "version": "node scripts/sync-version.mjs"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -43,6 +45,7 @@
     "bin",
     "cli",
     "lib",
+    "scripts",
     "template",
     "references",
     "skills",
