@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0 - 2026-06-14
+
+- Added open `extensions` mapping support on version 1 tasks.
+- Added `submit --extensions-file` and `submit --extensions-json`.
+- Added `delivery-hpke-v1` extension specification and reference implementation
+  under `lib/extensions/delivery/`.
+- Added `creamlon extension delivery` CLI helpers for prepare, send-input,
+  fetch-input, send-output, and fetch-output.
+- Added presigned object-storage and GitHub private-repo artifact transports.
+- Documented `payment-bridge-v1` as an external payment to credential pattern.
+- `inspect` now surfaces `delivery_extension` when advertised in `creamlon.yaml`.
+
+### Fixes
+
+- `hash --file` now hashes raw file bytes, matching extension `send-input` digest checks.
+- `extension delivery fetch-input` requires `--output-file`.
+- GitHub delivery transport passes `ref`/`branch` on artifact uploads.
+- `extension delivery fetch-output` verifies Ed25519 proof signatures by default (`--no-verify` to skip).
+- Documented X25519 SPKI/PKCS8 key encoding for delivery keys.
+
 ## 0.2.0 - 2026-06-14
 
 - Added optional one-time `voucher-hmac-v1` task credentials without changing

@@ -226,6 +226,56 @@ test('submit supports a free node without authorization options', async () => {
   assert.doesNotMatch(calls[0].body, /authorization:/);
 });
 
+test('submit attaches task extensions from --extensions-file', async () => {
+  const { publicKeyBase64Url } = await generateKeyPair(null);
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-submit-ext-'));
+  const extensionsPath = join(dir, 'extensions.json');
+  await writeFile(extensionsPath, `${JSON.stringify({
+    delivery: {
+      scheme: 'hpke-x25519-aes256gcm-v1',
+      transport: 'presigned-object-storage',
+      ephemeral_public_key: 'YWJjZGVmZ2hpamsxMjM0NTY3ODkwQUJDREVGR0hJSktMTU5P',
+      artifacts: {
+        input: { upload_url: 'https://storage.example/input-put' },
+        output: { upload_url: 'https://storage.example/output-put' },
+      },
+    },
+  })}\n`);
+  const calls = [];
+  installMockFetch((url, init) => {
+    if (url.includes('raw.githubusercontent.com')) {
+      return { status: 200, body: FREE_MANIFEST_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
+    }
+    if (url.endsWith('/issues') && init?.method === 'POST') {
+      calls.push(JSON.parse(init.body));
+      return {
+        status: 201,
+        body: { number: 9, html_url: 'https://github.com/o/r/issues/9', title: '[task] echo' },
+      };
+    }
+    return { status: 404, body: { message: 'not found' } };
+  });
+
+  try {
+    await runCli([
+      'submit', 'owner/repo',
+      '--capability-id', 'echo',
+      '--media-type', 'text/plain',
+      '--input-digest', hashText('hello'),
+      '--requester', 'github:alice/caller',
+      '--extensions-file', extensionsPath,
+      '--token', 'test-token',
+    ]);
+  } finally {
+    resetFetch();
+    await rm(dir, { recursive: true, force: true });
+  }
+
+  assert.equal(calls.length, 1);
+  const task = parseTask(calls[0].body);
+  assert.equal(task.extensions.delivery.transport, 'presigned-object-storage');
+});
+
 test('credential CLI creates, lists, and revokes without reprinting secrets', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-credential-cli-'));
   const logs = [];

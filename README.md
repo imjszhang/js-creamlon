@@ -177,7 +177,7 @@ file, release asset, object-storage URL, or another transport.
 ### Install the CLI
 
 ```bash
-npm install --global creamlon@0.2.0
+npm install --global creamlon@0.3.0
 creamlon help
 ```
 
@@ -325,10 +325,32 @@ ownership, duplicate redemption, request IDs, task expiry, signature validity,
 and input/output bindings. It does not verify how a credential was obtained,
 whether money moved, or whether an output is useful.
 
+## Extensions
+
+Creamlon core stays small. Optional integrations live outside the normative
+protocol:
+
+- [Extensions overview](./extensions/README.md)
+- [Private delivery `delivery-hpke-v1`](./extensions/delivery-hpke-v1.md)
+- [Payment bridge pattern](./extensions/payment-bridge-v1.md)
+
+CLI helpers:
+
+```bash
+creamlon extension delivery keygen --out .creamlon
+creamlon extension delivery prepare owner/repo --transport presigned-object-storage ...
+creamlon extension delivery send-input --task-file task.yaml --input-file input.bin
+creamlon extension delivery fetch-output owner/repo <issue#> --outbox .creamlon/outbox/<id>.json
+```
+
+Artifact transport and external payment remain extension concerns. Core still
+verifies digests, credentials, and Ed25519 proofs.
+
 ## Documentation
 
 - [Protocol specification](./references/protocol.md)
 - [End-to-end walkthrough](./references/examples.md)
+- [Extensions](./extensions/README.md)
 - [Agent Skill](./skills/creamlon-skill/SKILL.md)
 - [Security policy](./SECURITY.md)
 - [Contributing guide](./CONTRIBUTING.md)

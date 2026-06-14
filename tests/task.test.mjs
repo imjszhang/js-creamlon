@@ -86,3 +86,23 @@ test('task issue title helpers', () => {
 test('isExpired detects past expires', () => {
   assert.equal(isExpired({ expires: '2020-01-01T00:00:00Z' }, new Date('2026-01-01')), true);
 });
+
+test('parseTask and serializeTask roundtrip extensions', () => {
+  const yaml = `${YAML.trim()}
+extensions:
+  delivery:
+    scheme: hpke-x25519-aes256gcm-v1
+    transport: presigned-object-storage
+`;
+  const task = parseTask(yaml);
+  assert.equal(task.extensions.delivery.scheme, 'hpke-x25519-aes256gcm-v1');
+  assert.deepEqual(validateTask(task), []);
+  const reparsed = parseTask(serializeTask(task));
+  assert.equal(reparsed.extensions.delivery.transport, 'presigned-object-storage');
+});
+
+test('validateTask rejects non-mapping extensions', () => {
+  const task = parseTask(YAML);
+  task.extensions = ['bad'];
+  assert.ok(validateTask(task).includes('extensions must be a mapping'));
+});

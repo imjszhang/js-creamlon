@@ -92,6 +92,10 @@ credential:
 
 The input digest is the supplied digest or SHA-256 of the UTF-8 `value`/`url`.
 
+Tasks may include an open `extensions` mapping. Core validation requires it to
+be a mapping when present and does not interpret extension semantics. Registered
+extensions live outside this specification.
+
 ## Task Credentials
 
 A task credential is a secret supplied by the node operator through any

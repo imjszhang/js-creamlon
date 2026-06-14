@@ -2,7 +2,7 @@
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPublicKey, randomUUID, randomBytes } from 'node:crypto';
-import { hashText, hashFile, assertValidHashDigest } from '../lib/hash.mjs';
+import { hashText, hashFile, hashFileBytes, assertValidHashDigest } from '../lib/hash.mjs';
 import { fetchManifest, parseManifest, parseRepoSlug, validateManifest } from '../lib/manifest.mjs';
 import {
   buildProofFields,
@@ -69,6 +69,8 @@ import {
   validateRedemption,
   writeCredentialStore,
 } from '../lib/credential.mjs';
+import { cmdExtension, EXTENSION_DELIVERY_HELP } from './extensionDelivery.mjs';
+import { parseManifestDelivery } from '../lib/extensions/delivery/schema.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -83,6 +85,11 @@ const VALUE_OPTIONS = new Set([
   '--input-type', '--output-type', '--status', '--limit', '--sort', '--cache-ttl',
   '--old-public-key', '--new-public-key', '--rotated-at', '--status-out',
   '--credential', '--credentials', '--credential-digest', '--task-intent-digest',
+  '--extensions-file', '--extensions-json', '--transport', '--outbox-dir', '--extensions-out',
+  '--input-upload-url', '--input-get-url', '--output-upload-url', '--output-get-url',
+  '--github-repo', '--github-input-path', '--github-output-path', '--github-ref',
+  '--task-file', '--manifest-file', '--receive-public-key', '--outbox', '--delivery-key',
+  '--proof-file', '--no-verify',
 ]);
 
 const HELP = {
@@ -112,6 +119,7 @@ Commands:
   audit [--repo-path <dir>]          Audit local proofs.log
   status [--repo-path <dir>]         Write public node health status
   init <dir> [--name <name>]        Scaffold agent node from template
+  extension delivery <cmd>          Private artifact delivery helpers
   help [command]                    Show help
 
 submit/deliver/reject require GITHUB_TOKEN, GH_TOKEN, or --token.
@@ -150,6 +158,7 @@ The complete credential is displayed only by create. Keep it secret.`,
 creamlon hash --file <path>
 
 Compute a sha256:... digest.
+--file hashes raw file bytes (use with --input-digest and extension delivery).
 Multi-word text is joined with spaces; quote text that contains shell metacharacters.`,
   sign: `creamlon sign [options]
 
@@ -204,6 +213,8 @@ Options:
   --keys <path>                 Private HMAC key map
   --authorization-expires <iso>
   --credential <crv1_...>  One-time task credential
+  --extensions-file <json>   Task extensions JSON object
+  --extensions-json <json>   Inline task extensions JSON
   --ref <branch>         creamlon.yaml branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --pretty               Pretty-print result JSON`,
@@ -256,6 +267,7 @@ Audit the node and write trust/status.json for discovery. The output path defaul
   init: `creamlon init <dir> [--name <name>]
 
 Copy template/agent-node/ to <dir> and replace {{name}} placeholders.`,
+  extensionDelivery: EXTENSION_DELIVERY_HELP,
 };
 
 function parseArgs(argv) {
@@ -313,6 +325,26 @@ function parseArgs(argv) {
     else if (arg === '--credentials') { i += 1; opts.credentials = argv[i]; }
     else if (arg === '--credential-digest') { i += 1; opts.credentialDigest = argv[i]; }
     else if (arg === '--task-intent-digest') { i += 1; opts.taskIntentDigest = argv[i]; }
+    else if (arg === '--extensions-file') { i += 1; opts.extensionsFile = argv[i]; }
+    else if (arg === '--extensions-json') { i += 1; opts.extensionsJson = argv[i]; }
+    else if (arg === '--transport') { i += 1; opts.transport = argv[i]; }
+    else if (arg === '--outbox-dir') { i += 1; opts.outboxDir = argv[i]; }
+    else if (arg === '--extensions-out') { i += 1; opts.extensionsOut = argv[i]; }
+    else if (arg === '--input-upload-url') { i += 1; opts.inputUploadUrl = argv[i]; }
+    else if (arg === '--input-get-url') { i += 1; opts.inputGetUrl = argv[i]; }
+    else if (arg === '--output-upload-url') { i += 1; opts.outputUploadUrl = argv[i]; }
+    else if (arg === '--output-get-url') { i += 1; opts.outputGetUrl = argv[i]; }
+    else if (arg === '--github-repo') { i += 1; opts.githubRepo = argv[i]; }
+    else if (arg === '--github-input-path') { i += 1; opts.githubInputPath = argv[i]; }
+    else if (arg === '--github-output-path') { i += 1; opts.githubOutputPath = argv[i]; }
+    else if (arg === '--github-ref') { i += 1; opts.githubRef = argv[i]; }
+    else if (arg === '--task-file') { i += 1; opts.taskFile = argv[i]; }
+    else if (arg === '--manifest-file') { i += 1; opts.manifestFile = argv[i]; }
+    else if (arg === '--receive-public-key') { i += 1; opts.receivePublicKey = argv[i]; }
+    else if (arg === '--outbox') { i += 1; opts.outbox = argv[i]; }
+    else if (arg === '--delivery-key') { i += 1; opts.deliveryKey = argv[i]; }
+    else if (arg === '--proof-file') { i += 1; opts.proofFile = argv[i]; }
+    else if (arg === '--no-verify') opts.noVerify = true;
     else if (arg.startsWith('--')) throw usageError(`unknown option: ${arg}`);
     else positional.push(arg);
   }
@@ -383,7 +415,7 @@ async function cmdKeygen(opts) {
 
 async function cmdHash(positional, opts) {
   if (opts.file) {
-    const digest = await hashFile(opts.file);
+    const digest = await hashFileBytes(opts.file);
     console.log(digest);
     return;
   }
@@ -490,6 +522,8 @@ async function cmdInspect(positional, opts) {
     errors,
   };
   if (out.valid) out.public_key_fingerprint = publicKeyFingerprint(parsed.identity.public_key);
+  const delivery = parseManifestDelivery(parsed);
+  if (delivery) out.delivery_extension = delivery;
   printJson(out, opts.pretty);
 }
 
@@ -607,6 +641,20 @@ async function cmdSubmit(positional, opts) {
       task.expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     }
     task.credential = authorizeCredential(task, parsed, opts.credential);
+  }
+
+  if (opts.extensionsFile) {
+    const raw = JSON.parse(await readFile(resolve(opts.extensionsFile), 'utf8'));
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      fail('extensions file must be a JSON object');
+    }
+    task.extensions = raw;
+  } else if (opts.extensionsJson) {
+    const raw = JSON.parse(opts.extensionsJson);
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      fail('extensions JSON must be an object');
+    }
+    task.extensions = raw;
   }
 
   const errors = validateTask(task, {
@@ -1258,7 +1306,9 @@ export async function runCli(argv) {
     const topic = rest[0];
     const helpKey = topic === 'hmac-key-new' ? 'hmacKeyNew'
       : topic === 'fetch-proof' ? 'fetchProof'
-        : topic === 'key-rotate' ? 'keyRotate' : topic;
+        : topic === 'key-rotate' ? 'keyRotate'
+          : topic === 'extension' && rest[1] === 'delivery' ? 'extensionDelivery'
+            : topic;
     console.log(helpKey && HELP[helpKey] ? HELP[helpKey] : HELP.main);
     return;
   }
@@ -1317,6 +1367,13 @@ export async function runCli(argv) {
       break;
     case 'init':
       await cmdInit(positional, opts);
+      break;
+    case 'extension':
+      await cmdExtension(positional, opts, {
+        loadManifestContext,
+        resolveToken,
+        printJson,
+      });
       break;
     default:
       throw usageError(`unknown command: ${command}`);

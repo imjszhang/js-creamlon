@@ -10,12 +10,25 @@
 
 Do not publish secrets or private input values in GitHub Issues.
 
+## Private delivery extension
+
+When using `delivery-hpke-v1`:
+
+1. `extension delivery prepare` — create task keys, extensions JSON, and outbox.
+2. `extension delivery send-input` — encrypt and upload input before or after submit.
+3. `submit --extensions-file` with `--input-digest` (compute digests with `creamlon hash --file`, which hashes raw bytes).
+4. `fetch-proof --verify` after the Issue closes.
+5. `extension delivery fetch-output` — decrypt output, verify `proof.output_digest`, and verify Ed25519 proof by default.
+
+Keep `.creamlon/outbox/{request_id}.json` local (mode `0600`). Never commit
+outbox files or print GET URLs, ephemeral private keys, or artifact plaintext.
+
 ## One-time task credentials
 
 When a capability requires credential access, the node operator creates:
 
 ```bash
-npx --yes creamlon@0.2.0 credential create \
+npx --yes creamlon@0.3.0 credential create \
   --repo-path . \
   --capability-id <id>
 ```
@@ -34,7 +47,7 @@ Free nodes need no key map. To require HMAC authorization, declare
 `profiles.authorization.scheme: hmac-sha256` and generate a customer key:
 
 ```bash
-npx --yes creamlon@0.2.0 hmac-key-new \
+npx --yes creamlon@0.3.0 hmac-key-new \
   --key-id customer-1 \
   --out .creamlon/authorization.keys.json
 ```
@@ -46,3 +59,6 @@ npx --yes creamlon@0.2.0 hmac-key-new \
 - Run `audit --repo-path .` to verify the local manifest, redemption log, and
   proof history.
 - Record identity changes with `key-rotate` before discarding the old key.
+
+See [extensions/payment-bridge-v1.md](../../../extensions/payment-bridge-v1.md)
+for external payment to credential patterns.

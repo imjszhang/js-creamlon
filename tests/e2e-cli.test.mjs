@@ -278,3 +278,13 @@ test('key-rotate rejects a private key that does not match the old public key', 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('extension delivery fetch-input requires --output-file', async () => {
+  await assert.rejects(
+    () => runCli([
+      'extension', 'delivery', 'fetch-input', 'owner/repo', '1',
+      '--token', 'test-token',
+    ]),
+    (error) => error.message.includes('fetch-input requires --output-file'),
+  );
+});

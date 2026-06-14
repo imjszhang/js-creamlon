@@ -8,7 +8,7 @@ description: "Use the Creamlon protocol as either a caller or node operator: dis
 Run the published CLI through npm:
 
 ```bash
-npx --yes creamlon@0.2.0 help
+npx --yes creamlon@0.3.0 help
 ```
 
 Require Node.js 18 or newer. Public reads can run anonymously but are
@@ -24,12 +24,12 @@ creating or operating a repository that publishes `creamlon.yaml`.
 Discover and inspect:
 
 ```bash
-npx --yes creamlon@0.2.0 discover echo \
+npx --yes creamlon@0.3.0 discover echo \
   --input-type text/plain \
   --output-type text/plain \
   --pretty
 
-npx --yes creamlon@0.2.0 inspect owner/repo --pretty
+npx --yes creamlon@0.3.0 inspect owner/repo --pretty
 ```
 
 Confirm the capability, media types, status, and identity fingerprint. Treat
@@ -38,7 +38,7 @@ proof history as self-published evidence, not a quality score.
 Submit a task:
 
 ```bash
-npx --yes creamlon@0.2.0 submit owner/repo \
+npx --yes creamlon@0.3.0 submit owner/repo \
   --capability-id echo \
   --media-type text/plain \
   --input "hello" \
@@ -70,7 +70,7 @@ When the node declares `profiles.authorization`, also pass:
 Verify delivery:
 
 ```bash
-npx --yes creamlon@0.2.0 fetch-proof owner/repo <issue-number> \
+npx --yes creamlon@0.3.0 fetch-proof owner/repo <issue-number> \
   --verify \
   --pretty
 ```
@@ -78,13 +78,47 @@ npx --yes creamlon@0.2.0 fetch-proof owner/repo <issue-number> \
 Accept a result only when signature and task binding verification succeed. A
 valid proof establishes identity and input/output binding, not output quality.
 
+## Private artifact delivery (extension)
+
+For encrypted input/output transport, use the `delivery-hpke-v1` extension.
+Core Issues carry digests and proofs only. See `extensions/delivery-hpke-v1.md`
+in the repository.
+
+Caller agent sequence:
+
+```bash
+npx --yes creamlon@0.3.0 extension delivery prepare owner/repo \
+  --transport presigned-object-storage \
+  --input-upload-url ... --input-get-url ... \
+  --output-upload-url ... --output-get-url ...
+
+npx --yes creamlon@0.3.0 extension delivery send-input \
+  --task-file ./task.yaml --input-file ./input.bin \
+  --receive-public-key <node-delivery-public-key>
+
+npx --yes creamlon@0.3.0 submit owner/repo \
+  --extensions-file ./<request_id>.extensions.json \
+  --input-digest sha256:... \
+  --capability-id code_review \
+  --media-type application/octet-stream \
+  --requester github:your-user/your-repo
+
+npx --yes creamlon@0.3.0 fetch-proof owner/repo <issue-number> --verify --pretty
+
+npx --yes creamlon@0.3.0 extension delivery fetch-output owner/repo <issue-number> \
+  --outbox .creamlon/outbox/<request_id>.json \
+  --output-file ./result.md
+```
+
+Never put GET URLs, delivery private keys, or artifact plaintext in Issues.
+
 ## Node Workflow
 
 Create a node:
 
 ```bash
-npx --yes creamlon@0.2.0 init ./my-node --name my-node
-npx --yes creamlon@0.2.0 keygen --out ./my-node/.creamlon
+npx --yes creamlon@0.3.0 init ./my-node --name my-node
+npx --yes creamlon@0.3.0 keygen --out ./my-node/.creamlon
 ```
 
 Put the generated public key in `creamlon.yaml`, publish the repository with
@@ -95,7 +129,7 @@ For a credential-protected capability, declare `access.mode: credential` and
 credential:
 
 ```bash
-npx --yes creamlon@0.2.0 credential create \
+npx --yes creamlon@0.3.0 credential create \
   --repo-path . \
   --capability-id code_review \
   --pretty
@@ -107,7 +141,7 @@ or access channel. Creamlon verifies redemption, not money movement.
 Validate incoming tasks:
 
 ```bash
-npx --yes creamlon@0.2.0 watch owner/repo \
+npx --yes creamlon@0.3.0 watch owner/repo \
   --repo-path . \
   --once \
   --pretty
@@ -116,23 +150,36 @@ npx --yes creamlon@0.2.0 watch owner/repo \
 Execute only tasks reported as valid. Then deliver a local result file:
 
 ```bash
-npx --yes creamlon@0.2.0 deliver owner/repo <issue-number> \
+npx --yes creamlon@0.3.0 deliver owner/repo <issue-number> \
   --repo-path . \
   --output-file ./result.txt \
   --pretty
 ```
 
+For private delivery tasks, decrypt input and upload encrypted output around
+`deliver`:
+
+```bash
+npx --yes creamlon@0.3.0 extension delivery keygen --out .creamlon
+
+npx --yes creamlon@0.3.0 extension delivery fetch-input owner/repo <issue-number> \
+  --repo-path . --output-file ./input.bin --input-get-url <private-url-if-presigned>
+
+npx --yes creamlon@0.3.0 extension delivery send-output owner/repo <issue-number> \
+  --repo-path . --output-file ./result.txt
+```
+
 Use `--resume` after interruption, then refresh public health:
 
 ```bash
-npx --yes creamlon@0.2.0 status --repo-path .
+npx --yes creamlon@0.3.0 status --repo-path .
 ```
 
 Commit `trust/proofs.log`, `trust/redemptions.log` when present, and
 `trust/status.json`. Reject invalid tasks without signing a proof:
 
 ```bash
-npx --yes creamlon@0.2.0 reject owner/repo <issue-number> \
+npx --yes creamlon@0.3.0 reject owner/repo <issue-number> \
   --repo-path . \
   --pretty
 ```
