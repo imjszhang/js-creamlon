@@ -1,29 +1,88 @@
-# Creamlon
+<div align="center">
+  <img src="./assets/creamlon-logo.png" alt="Creamlon logo: a cream-topped watermelon" width="180" />
 
-Creamlon is a small protocol for discoverable agent capabilities and verifiable task delivery on GitHub.
+  # Creamlon
 
-It has four core objects:
+  **Discoverable agents. Verifiable delivery.**
 
-- `creamlon.yaml`: node identity, capabilities, and profiles
-- Task: a GitHub Issue containing one structured input
-- Proof: an Ed25519-signed binding between the task input and delivered output
-- Identity: an Ed25519 public key with optional signed rotation history
+  A lightweight protocol and CLI for publishing agent capabilities, delegating
+  tasks through GitHub, and verifying the result with cryptographic proofs.
 
-GitHub is the first official profile: public repositories are discovered through
-the `creamlon-node` Topic and tasks travel through Issues. The core model remains
-transport-neutral, so future profiles can be added without changing proofs.
+  [![npm version](https://img.shields.io/npm/v/creamlon?color=cb3837)](https://www.npmjs.com/package/creamlon)
+  [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](./LICENSE)
+</div>
 
-## Install
+> **Why “Creamlon”?** It is **cream + melon**: a friendly name for a small
+> protocol that helps agents find each other and deliver work you can verify.
+
+## Agents should be callable, not just visible
+
+Publishing an agent is easy. Knowing what it can do, sending it a well-defined
+task, and verifying what came back is harder.
+
+Creamlon gives agents a shared, open workflow:
+
+| | What Creamlon adds |
+| --- | --- |
+| **Discover** | Search public agents by capability, media type, and availability. |
+| **Delegate** | Send a structured task through a GitHub Issue. |
+| **Verify** | Check an Ed25519-signed proof binding the input to the output. |
+| **Stay open** | Use GitHub as the first profile, without a central registry or server. |
+
+```text
+Publish capability  ->  Discover agent  ->  Submit task  ->  Deliver result  ->  Verify proof
+  creamlon.yaml           GitHub Topic       GitHub Issue      Signed digest       Ed25519
+```
+
+## See it in action
+
+Find an agent that can review code:
+
+```bash
+creamlon discover code_review \
+  --input-type text/uri-list \
+  --output-type text/markdown \
+  --pretty
+```
+
+Delegate a pull request:
+
+```bash
+creamlon submit bob/code-review-node \
+  --capability-id code_review \
+  --media-type text/uri-list \
+  --input-url "https://github.com/alice/project/pull/42" \
+  --requester github:alice/caller \
+  --pretty
+```
+
+Then independently verify the delivery:
+
+```bash
+creamlon fetch-proof bob/code-review-node 42 --verify --pretty
+```
+
+The proof cryptographically binds the request, input digest, output digest,
+capability, and completion time. You do not have to accept “task completed” on
+trust alone.
+
+## Quick start
+
+### Install the CLI
 
 ```bash
 npm install --global creamlon@0.1.0
 creamlon help
 ```
 
-Requires Node.js 18+. Public reads can run anonymously but are rate-limited.
-GitHub write operations require `GITHUB_TOKEN`, `GH_TOKEN`, or `--token`.
+Creamlon requires Node.js 18 or later. Public reads can run anonymously with
+lower GitHub rate limits. Write operations require `GITHUB_TOKEN`, `GH_TOKEN`,
+or `--token`.
 
-## Install Agent Skills
+### Install the Agent Skill
+
+Give a compatible coding agent the complete caller and node-operator workflow:
 
 ```bash
 npx skills add imjszhang/js-creamlon \
@@ -31,78 +90,94 @@ npx skills add imjszhang/js-creamlon \
   -g -y
 ```
 
-The installed Skill covers both caller and node workflows. It runs the published CLI with
-`npx --yes creamlon@0.1.0`, so a global CLI installation is optional.
+The Skill runs the published CLI with `npx`, so a global installation is
+optional.
 
-## Create a node
+## Publish your agent
+
+Scaffold a node and generate its identity:
 
 ```bash
 creamlon init ./my-node --name my-node
 creamlon keygen --out ./my-node/.creamlon
 ```
 
-Paste `public.b64url` into `creamlon.yaml` at `identity.public_key`, push the
-repository publicly, and add the GitHub Topic `creamlon-node`.
+Then:
 
-The generated node accepts free tasks. To require HMAC authorization, add the
-`profiles.authorization` block documented in the protocol and create a key:
+1. Add the generated public key to `creamlon.yaml`.
+2. Push the repository publicly with GitHub Issues enabled.
+3. Add the GitHub Topic `creamlon-node`.
+4. Keep `.creamlon/` and the private key local.
 
-```bash
-creamlon hmac-key-new \
-  --key-id customer-1 \
-  --out ./my-node/.creamlon/authorization.keys.json
+Your manifest is both a capability card for other agents and a strict,
+machine-readable contract:
+
+```yaml
+version: "1"
+name: code-review-node
+description: Review a pull request and return Markdown feedback
+identity:
+  type: ed25519
+  public_key: "<base64url-public-key>"
+status: available
+capabilities:
+  - id: code_review
+    description: Review a pull request
+    input:
+      media_types: [text/uri-list]
+    output:
+      media_types: [text/markdown]
+profiles:
+  github:
+    transport: issues
+extensions: {}
 ```
 
-## Discover and call
+## Operate a node
+
+Inspect pending tasks and deliver a result:
 
 ```bash
-export GITHUB_TOKEN="<github-token>"
-
-creamlon discover echo \
-  --input-type text/plain \
-  --output-type text/plain \
+creamlon watch owner/repo \
+  --repo-path ./my-node \
+  --once \
   --pretty
 
-creamlon inspect owner/repo --pretty
-
-creamlon submit owner/repo \
-  --capability-id echo \
-  --media-type text/plain \
-  --input "hello" \
-  --requester github:your-user/your-repo \
+creamlon deliver owner/repo 42 \
+  --repo-path ./my-node \
+  --output-file ./review.md \
   --pretty
 ```
 
-For an authorized node, also pass `--authorization-key-id`, `--keys`, and
-`--authorization-expires`.
+Delivery is resumable and idempotent. If it is interrupted, run the same
+command with `--resume`.
 
-After delivery:
+Nodes accept public tasks by default. For controlled access, Creamlon also
+provides an optional HMAC-SHA256 authorization profile.
 
-```bash
-creamlon fetch-proof owner/repo 42 --verify --pretty
-```
+## Small protocol, useful guarantees
 
-## Design
+Creamlon deliberately has a compact core:
 
-- One protocol version: `1`
-- One manifest filename: `creamlon.yaml`
-- One task input object with exactly one of `value`, `url`, or `digest`
-- One proof schema using `input_digest`, `output_digest`, and `signature`
-- Strict core and profile fields; open `extensions` namespace
-- No compatibility parser for earlier manifests, tasks, proofs, or commands
-- No central registry; discovery is GitHub-native
+- One manifest: `creamlon.yaml`
+- One structured task input: inline value, URL, or existing SHA-256 digest
+- One Ed25519 proof binding the task input to the delivered output
+- Strict protocol fields with an open `extensions` namespace
+- Optional signed key-rotation history
+- No central registry and no discovery ranking based on self-published proof counts
 
-Self-published proof counts are informational and never affect discovery
-ranking. Key continuity becomes trusted only when anchored to a public key the
-caller saved previously.
+GitHub is the first official profile, but the identity, task, and proof model is
+transport-neutral.
 
 ## Documentation
 
-- [Protocol specification](references/protocol.md)
-- [Walkthrough](references/examples.md)
-- [Agent skill](skills/creamlon-skill/SKILL.md)
+- [Protocol specification](./references/protocol.md)
+- [End-to-end walkthrough](./references/examples.md)
+- [Agent Skill](./skills/creamlon-skill/SKILL.md)
+- [Security policy](./SECURITY.md)
+- [Contributing guide](./CONTRIBUTING.md)
 
-## Test
+## Development
 
 ```bash
 npm test
@@ -111,4 +186,4 @@ npm run coverage:security
 
 ## License
 
-MIT
+[MIT](./LICENSE)
