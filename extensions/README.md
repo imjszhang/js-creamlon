@@ -20,7 +20,8 @@ validation rules.
 
 | Extension | Document | Purpose |
 | --- | --- | --- |
-| `delivery-hpke-v1` | [delivery-hpke-v1.md](./delivery-hpke-v1.md) | Encrypted bidirectional artifact transport |
+| `delivery-hpke-v2` | [delivery-hpke-v2.md](./delivery-hpke-v2.md) | RFC 9180 encrypted bidirectional artifact transport |
+| `delivery-hpke-v1` | [delivery-hpke-v1.md](./delivery-hpke-v1.md) | Legacy Creamlon 0.3.0 encrypted transport |
 | `payment-bridge-v1` | [payment-bridge-v1.md](./payment-bridge-v1.md) | External payment to credential issuance pattern |
 
 ## Interoperability

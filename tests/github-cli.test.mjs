@@ -772,6 +772,64 @@ test('fetch-proof extracts and verifies proof from comments', async () => {
   assert.equal(out.key_continuity, 'self_consistent');
 });
 
+test('verify loads public key rotations without a GitHub token', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-anonymous-verify-'));
+  const oldKeys = await generateKeyPair(null);
+  const currentKeys = await generateKeyPair(null);
+  const proof = signProof(buildProofFields({
+    requestId: 'req-anonymous-verify',
+    capabilityId: 'echo',
+    inputDigest: hashText('in'),
+    outputDigest: hashText('out'),
+    completedAt: '2026-06-13T00:00:00.000Z',
+  }), oldKeys.privateKey);
+  const rotation = signKeyRotation({
+    oldPublicKey: oldKeys.publicKeyBase64Url,
+    newPublicKey: currentKeys.publicKeyBase64Url,
+    rotatedAt: '2026-06-14T00:00:00.000Z',
+  }, oldKeys.privateKey);
+  const proofPath = join(dir, 'proof.json');
+  await writeFile(proofPath, `${JSON.stringify(proof)}\n`, 'utf8');
+  const requests = [];
+  installMockFetch((url, init = {}) => {
+    requests.push({ url, authorization: init.headers?.Authorization });
+    if (url.includes('raw.githubusercontent.com')) {
+      return { status: 200, body: FREE_MANIFEST_YAML.replace('PLACEHOLDER', currentKeys.publicKeyBase64Url) };
+    }
+    if (url.includes('/contents/trust/key-rotations.log')) {
+      return {
+        status: 200,
+        body: {
+          type: 'file',
+          encoding: 'base64',
+          content: Buffer.from(`${JSON.stringify(rotation)}\n`).toString('base64'),
+        },
+      };
+    }
+    return { status: 404, body: { message: 'not found' } };
+  });
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (message) => logs.push(message);
+  try {
+    await runCli([
+      'verify',
+      '--repo', 'owner/repo',
+      '--proof', proofPath,
+      '--pretty',
+    ]);
+  } finally {
+    console.log = originalLog;
+    resetFetch();
+    await rm(dir, { recursive: true, force: true });
+  }
+  const out = JSON.parse(logs.join('\n'));
+  assert.equal(out.ok, true);
+  assert.equal(out.key_continuity, 'self_consistent');
+  assert.ok(requests.some((request) => request.url.includes('/contents/trust/key-rotations.log')));
+  assert.ok(requests.every((request) => request.authorization == null));
+});
+
 test('hmac-key-new creates a private HMAC authorization key', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-hmac-key-'));
   try {
@@ -779,6 +837,10 @@ test('hmac-key-new creates a private HMAC authorization key', async () => {
     await runCli(['hmac-key-new', '--key-id', 'customer-1', '--out', keysPath]);
     const keys = JSON.parse(await readFile(keysPath, 'utf8'));
     assert.match(keys['customer-1'], /^[A-Za-z0-9_-]+$/);
+    await import('node:fs/promises').then((fs) => fs.chmod(keysPath, 0o644));
+    await runCli(['hmac-key-new', '--key-id', 'customer-2', '--out', keysPath]);
+    const mode = await import('node:fs/promises').then((fs) => fs.stat(keysPath));
+    assert.equal(mode.mode & 0o077, 0);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

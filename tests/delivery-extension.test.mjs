@@ -8,7 +8,14 @@ import { sendInput, fetchInput } from '../lib/extensions/delivery/input.mjs';
 import { sendOutput, fetchOutput } from '../lib/extensions/delivery/output.mjs';
 import { generateDeliveryKeyPair } from '../lib/extensions/delivery/hpke.mjs';
 import { hashBuffer } from '../lib/hash.mjs';
-import { setPresignedFetch } from '../lib/extensions/delivery/transport-presigned.mjs';
+import {
+  setPresignedFetch,
+  validatePresignedUrl,
+} from '../lib/extensions/delivery/transport-presigned.mjs';
+import {
+  validateManifestDelivery,
+  validateTaskDelivery,
+} from '../lib/extensions/delivery/schema.mjs';
 import { serializeTask } from '../lib/task.mjs';
 
 test('prepare writes outbox and task extensions for presigned transport', async () => {
@@ -26,6 +33,48 @@ test('prepare writes outbox and task extensions for presigned transport', async 
   const outbox = JSON.parse(await readFile(result.outbox_path, 'utf8'));
   assert.equal(outbox.artifacts.input.get_url, 'https://storage.example/input-get');
   assert.ok(outbox.ephemeral_private_key);
+});
+
+test('delivery schema requires HTTPS URLs and a node host allowlist', () => {
+  const manifestDelivery = {
+    scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+    receive_public_key: generateDeliveryKeyPair().public_key,
+    transports: ['presigned-object-storage'],
+    presigned_hosts: ['storage.example'],
+  };
+  assert.deepEqual(validateManifestDelivery(manifestDelivery), []);
+  const delivery = {
+    scheme: manifestDelivery.scheme,
+    transport: 'presigned-object-storage',
+    ephemeral_public_key: generateDeliveryKeyPair().public_key,
+    artifacts: {
+      input: { upload_url: 'https://storage.example/input' },
+      output: { upload_url: 'https://storage.example/output' },
+    },
+  };
+  assert.deepEqual(validateTaskDelivery(delivery, { manifestDelivery }), []);
+  assert.ok(validateTaskDelivery({
+    ...delivery,
+    artifacts: {
+      ...delivery.artifacts,
+      output: { upload_url: 'https://other.example/output' },
+    },
+  }, { manifestDelivery }).some((error) => error.includes('not allowed')));
+});
+
+test('presigned transport rejects HTTP, credentials, localhost, and private addresses', () => {
+  assert.equal(validatePresignedUrl('https://storage.example/object'), 'https://storage.example/object');
+  for (const url of [
+    'http://storage.example/object',
+    'https://user:secret@storage.example/object',
+    'https://localhost/object',
+    'https://127.0.0.1/object',
+    'https://169.254.169.254/latest/meta-data',
+    'https://[::1]/object',
+    'https://[fc00::1]/object',
+  ]) {
+    assert.throws(() => validatePresignedUrl(url));
+  }
 });
 
 test('prepare includes github ref in task extensions', async () => {
@@ -137,7 +186,7 @@ test('presigned send-output and fetch-output verify proof digest', async () => {
   });
   const outputFile = join(tmpdir(), 'review.md');
   await writeFile(outputFile, outputText);
-  await sendOutput({ task, outputFile });
+  await sendOutput({ task, outputFile, allowedPresignedHosts: ['storage.example'] });
   const proof = { output_digest: hashBuffer(Buffer.from(outputText, 'utf8')) };
   const fetched = join(tmpdir(), 'fetched-review.md');
   const result = await fetchOutput({
@@ -148,6 +197,73 @@ test('presigned send-output and fetch-output verify proof digest', async () => {
   });
   assert.equal(result.ok, true);
   assert.equal(await readFile(fetched, 'utf8'), outputText);
+});
+
+test('presigned output delivery preserves arbitrary binary bytes', async () => {
+  const prepared = await prepareDelivery({
+    transport: 'presigned-object-storage',
+    requestId: 'req-delivery-binary',
+    inputUploadUrl: 'https://storage.example/input-put',
+    inputGetUrl: 'https://storage.example/input-get',
+    outputUploadUrl: 'https://storage.example/output-put',
+    outputGetUrl: 'https://storage.example/output-get',
+    outboxDir: await mkdtemp(join(tmpdir(), 'creamlon-outbox-')),
+  });
+  const task = {
+    version: '1',
+    request_id: prepared.request_id,
+    capability_id: 'binary',
+    requester: 'github:alice/caller',
+    input: {
+      media_type: 'application/octet-stream',
+      digest: hashBuffer('input'),
+    },
+    extensions: prepared.extensions,
+  };
+  const output = Buffer.from([0xff, 0xfe, 0x00, 0x80, 0x41]);
+  let encryptedOutput = null;
+  setPresignedFetch(async (url, init = {}) => {
+    if (init.method === 'PUT') {
+      encryptedOutput = Buffer.from(init.body);
+      return { ok: true, status: 200 };
+    }
+    const ab = new ArrayBuffer(encryptedOutput.length);
+    new Uint8Array(ab).set(encryptedOutput);
+    return { ok: true, status: 200, arrayBuffer: async () => ab };
+  });
+  const outputFile = join(tmpdir(), 'binary-output.bin');
+  const fetched = join(tmpdir(), 'fetched-binary-output.bin');
+  await writeFile(outputFile, output);
+  await sendOutput({ task, outputFile, allowedPresignedHosts: ['storage.example'] });
+  await fetchOutput({
+    task,
+    proof: { output_digest: hashBuffer(output) },
+    outboxFile: prepared.outbox_path,
+    outputFile: fetched,
+  });
+  assert.deepEqual(await readFile(fetched), output);
+});
+
+test('presigned output rejects hosts outside the node allowlist', async () => {
+  const prepared = await prepareDelivery({
+    transport: 'presigned-object-storage',
+    requestId: 'req-delivery-ssrf',
+    inputUploadUrl: 'https://storage.example/input-put',
+    inputGetUrl: 'https://storage.example/input-get',
+    outputUploadUrl: 'https://127.0.0.1/output-put',
+    outputGetUrl: 'https://storage.example/output-get',
+    outboxDir: await mkdtemp(join(tmpdir(), 'creamlon-outbox-')),
+  });
+  const task = {
+    request_id: prepared.request_id,
+    extensions: prepared.extensions,
+  };
+  const outputFile = join(tmpdir(), 'ssrf-output.bin');
+  await writeFile(outputFile, 'data');
+  await assert.rejects(
+    () => sendOutput({ task, outputFile, allowedPresignedHosts: ['storage.example'] }),
+    /not allowed/,
+  );
 });
 
 test('serializeTask preserves delivery extensions', async () => {

@@ -1,6 +1,6 @@
 ﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -32,6 +32,7 @@ test('cli init keygen sign verify e2e', async () => {
     assert.match(skill, /name: creamlon-node/);
 
     await runCli(['keygen', '--out', join(dir, '.creamlon')]);
+    assert.equal((await stat(join(dir, '.creamlon', 'private.key'))).mode & 0o077, 0);
     const pub = (await readFile(join(dir, '.creamlon', 'public.b64url'), 'utf8')).trim();
     const digest = hashText('hello');
 
@@ -58,6 +59,32 @@ test('cli init keygen sign verify e2e', async () => {
     ]);
     assert.equal(verify.status, 0, verify.stderr);
     assert.match(verify.stdout, /ok: true/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('keygen repairs permissions when replacing an existing private key', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-key-mode-'));
+  try {
+    await runCli(['keygen', '--out', dir]);
+    const privateKeyPath = join(dir, 'private.key');
+    await chmod(privateKeyPath, 0o644);
+    await runCli(['keygen', '--out', dir]);
+    assert.equal((await stat(privateKeyPath)).mode & 0o077, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('delivery keygen repairs permissions when replacing an existing private key', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-delivery-key-mode-'));
+  try {
+    await runCli(['extension', 'delivery', 'keygen', '--out', dir]);
+    const privateKeyPath = join(dir, 'delivery.private.b64url');
+    await chmod(privateKeyPath, 0o644);
+    await runCli(['extension', 'delivery', 'keygen', '--out', dir]);
+    assert.equal((await stat(privateKeyPath)).mode & 0o077, 0);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -203,6 +230,33 @@ test('audit verifies a valid local proof log', async () => {
     const result = JSON.parse(logs.join('\n'));
     assert.equal(result.ok, true);
     assert.equal(result.proof_count, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('audit rejects a redemption without a matching credential proof', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-orphan-redemption-'));
+  try {
+    await runCli(['init', dir, '--name', 'audit-agent']);
+    const { publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon'));
+    const agentPath = join(dir, 'creamlon.yaml');
+    const agentText = (await readFile(agentPath, 'utf8'))
+      .replace('REPLACE_WITH_public.b64url', publicKeyBase64Url);
+    await writeFile(agentPath, agentText, 'utf8');
+    await writeFile(join(dir, 'trust', 'redemptions.log'), `${JSON.stringify({
+      version: '1',
+      request_id: 'orphan',
+      credential_id: 'ABCDEFGH',
+      credential_digest: `sha256:${'a'.repeat(64)}`,
+      task_intent_digest: `sha256:${'b'.repeat(64)}`,
+      capability_id: 'echo',
+      redeemed_at: '2026-06-14T00:00:00Z',
+    })}\n`, 'utf8');
+    await assert.rejects(
+      () => runCli(['audit', '--repo-path', dir]),
+      /audit failed/,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

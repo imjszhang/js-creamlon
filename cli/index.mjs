@@ -1,4 +1,4 @@
-﻿import { readFile, writeFile, mkdir, readdir, stat, appendFile } from 'node:fs/promises';
+﻿import { chmod, readFile, writeFile, mkdir, readdir, stat, appendFile } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPublicKey, randomUUID, randomBytes } from 'node:crypto';
@@ -66,8 +66,8 @@ import {
   loadCredentialStore,
   loadRedemptions,
   publicCredentialRecord,
+  updateCredentialStore,
   validateRedemption,
-  writeCredentialStore,
 } from '../lib/credential.mjs';
 import { cmdExtension, EXTENSION_DELIVERY_HELP } from './extensionDelivery.mjs';
 import { parseManifestDelivery } from '../lib/extensions/delivery/schema.mjs';
@@ -472,22 +472,20 @@ async function cmdVerify(opts) {
     publicKeyB64 = parsed.identity?.public_key;
     if (!publicKeyB64) fail('creamlon.yaml has no identity.public_key');
     const token = resolveToken(opts);
-    if (token) {
-      const rotationsText = await getRepositoryFile(
-        owner,
-        repo,
-        'trust/key-rotations.log',
-        opts.ref || 'main',
-        token,
-        { optional: true },
-      );
-      continuity = inspectKeyContinuity(rotationsText, publicKeyB64);
-      if (continuity.status === 'broken') {
-        fail(`invalid key rotation chain: ${continuity.errors.join('; ')}`);
-      }
-      publicKeyB64 = publicKeyAt(continuity.history, proof.completed_at);
-      if (!publicKeyB64) fail('no public key valid at proof completion time');
+    const rotationsText = await getRepositoryFile(
+      owner,
+      repo,
+      'trust/key-rotations.log',
+      opts.ref || 'main',
+      token,
+      { optional: true },
+    );
+    continuity = inspectKeyContinuity(rotationsText, publicKeyB64);
+    if (continuity.status === 'broken') {
+      fail(`invalid key rotation chain: ${continuity.errors.join('; ')}`);
     }
+    publicKeyB64 = publicKeyAt(continuity.history, proof.completed_at);
+    if (!publicKeyB64) fail('no public key valid at proof completion time');
   }
   if (!publicKeyB64) throw usageError('verify requires --repo or --public-key');
 
@@ -1068,6 +1066,7 @@ async function auditRepository(repoPath) {
   }
   const entries = [];
   const seen = new Map();
+  const proofByRequest = new Map();
   let lineNumber = 0;
   for (const line of logText.split('\n')) {
     lineNumber += 1;
@@ -1091,9 +1090,20 @@ async function auditRepository(repoPath) {
         verify.reason = 'proof credential fields do not match redemptions.log';
       }
       if (!previous) seen.set(proof.request_id, proof);
+      if (!proofByRequest.has(proof.request_id)) proofByRequest.set(proof.request_id, proof);
       entries.push({ line: lineNumber, request_id: proof.request_id, verify, duplicate });
     } catch (error) {
       entries.push({ line: lineNumber, verify: { ok: false, reason: error.message }, duplicate: null });
+    }
+  }
+  for (const entry of redemptionEntries) {
+    if (entry.errors.length) continue;
+    const redemption = redemptionByCredential.get(entry.credential_id);
+    const proof = proofByRequest.get(entry.request_id);
+    if (!proof
+      || proof.credential_digest !== redemption.credential_digest
+      || proof.task_intent_digest !== redemption.task_intent_digest) {
+      entry.errors.push('redemption does not match a credential proof');
     }
   }
   const ok = manifestErrors.length === 0
@@ -1195,13 +1205,13 @@ async function cmdHmacKeyNew(opts) {
   keys[opts.authorizationKeyId] = generateHmacSecret(randomBytes(32));
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, `${JSON.stringify(keys, null, 2)}\n`, { flag: 'w', mode: 0o600 });
+  await chmod(outPath, 0o600);
   console.log(`HMAC authorization key written to ${outPath}`);
 }
 
 async function cmdCredential(positional, opts) {
   const action = positional[1];
   const { storePath, redemptionsPath } = credentialPaths(opts);
-  const store = await loadCredentialStore(storePath);
   const redemptions = await loadRedemptions(redemptionsPath);
 
   if (action === 'create') {
@@ -1218,8 +1228,9 @@ async function cmdCredential(positional, opts) {
       created_at: new Date().toISOString(),
       expires: opts.expires || null,
     };
-    store.credentials.push(record);
-    await writeCredentialStore(storePath, store);
+    await updateCredentialStore(storePath, (store) => {
+      store.credentials.push(record);
+    });
     printJson({
       credential: generated.value,
       ...publicCredentialRecord(record, redemptions),
@@ -1230,6 +1241,7 @@ async function cmdCredential(positional, opts) {
   }
 
   if (action === 'list') {
+    const store = await loadCredentialStore(storePath);
     printJson({
       store: storePath,
       credentials: store.credentials.map((record) => publicCredentialRecord(record, redemptions)),
@@ -1240,14 +1252,16 @@ async function cmdCredential(positional, opts) {
   if (action === 'revoke') {
     const credentialId = positional[2];
     if (!credentialId) throw usageError('credential revoke requires <credential-id>');
-    const record = findCredential(store, credentialId);
-    if (!record) fail(`unknown credential_id: ${credentialId}`, 4);
     if (redemptions.some((item) => item.credential_id === credentialId)) {
       fail('cannot revoke a redeemed credential', 4);
     }
-    record.status = 'revoked';
-    record.revoked_at = new Date().toISOString();
-    await writeCredentialStore(storePath, store);
+    let record;
+    await updateCredentialStore(storePath, (store) => {
+      record = findCredential(store, credentialId);
+      if (!record) fail(`unknown credential_id: ${credentialId}`, 4);
+      record.status = 'revoked';
+      record.revoked_at = new Date().toISOString();
+    });
     printJson(publicCredentialRecord(record, redemptions), opts.pretty);
     return;
   }

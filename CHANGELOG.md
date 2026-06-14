@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 - 2026-06-15
+
+- Added standards-based RFC 9180 HPKE delivery with X25519, HKDF-SHA256,
+  and AES-256-GCM while retaining legacy delivery decryption compatibility.
+- Added exact-host allowlists and stricter URL validation for presigned
+  object-storage delivery.
+- Added reusable cross-process file locking with stale-lock recovery for
+  credential redemption and delivery.
+
+### Fixes
+
+- Bound credential redemptions to the original task, capability, credential,
+  and task-intent digests.
+- Required audit redemptions to match a signed credential proof.
+- Preserved arbitrary binary delivery output instead of decoding it as UTF-8.
+- Repaired private key and HMAC key file permissions when replacing files.
+- Loaded public key rotation history during anonymous proof verification.
+- Synchronized the package-lock version during release checks.
+
 ## 0.3.0 - 2026-06-14
 
 - Added open `extensions` mapping support on version 1 tasks.

@@ -1,10 +1,16 @@
-# Extension: delivery-hpke-v1
+# Extension: delivery-hpke-v1 (legacy)
 
 Scheme: `hpke-x25519-aes256gcm-v1`
 
 Private bidirectional artifact delivery for agent tasks. Core Creamlon Issues
 carry digests and signed proofs. This extension encrypts input and output
 artifacts with X25519 key agreement and AES-256-GCM.
+
+This legacy scheme uses the Creamlon-specific
+`SHA-256(shared_secret || "creamlon-delivery-v1")` key derivation. It is kept
+for decrypting and completing tasks created by Creamlon 0.3.0. New nodes and
+tasks should use [delivery-hpke-v2](./delivery-hpke-v2.md), which implements
+RFC 9180.
 
 ## Non-goals
 
@@ -22,6 +28,8 @@ extensions:
     transports:
       - presigned-object-storage
       - github-private-repo
+    presigned_hosts:
+      - storage.example.com
 ```
 
 Generate a node delivery key pair:
@@ -32,6 +40,9 @@ creamlon extension delivery keygen --out .creamlon
 
 Place `delivery.public.b64url` in `creamlon.yaml` as `receive_public_key`.
 Keep `delivery.private.b64url` local.
+
+`presigned_hosts` is required for presigned transport even when completing a
+legacy task.
 
 ## Task extensions
 

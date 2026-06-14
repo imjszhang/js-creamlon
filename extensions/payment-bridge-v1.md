@@ -40,7 +40,7 @@ only.
 - Revoke and reissue if a credential secret leaks
 - Bind credential capability and expiry at creation time
 
-## Composition with delivery-hpke-v1
+## Composition with delivery-hpke-v2
 
 Payment bridge authorizes **access**. Delivery extension transports **private
 artifacts**. A paid private task uses both:

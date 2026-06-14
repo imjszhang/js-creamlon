@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { chmod, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { parseTask, resolveInputDigest } from '../lib/task.mjs';
 import { parseProofJson, publicKeyFromBase64Url, verifyProof } from '../lib/proof.mjs';
@@ -76,13 +76,16 @@ export async function cmdExtensionDeliveryKeygen(opts) {
   await mkdir(outDir, { recursive: true });
   const keys = generateDeliveryKeyPair();
   await writeFile(join(outDir, 'delivery.public.b64url'), `${keys.public_key}\n`, { mode: 0o600 });
-  await writeFile(join(outDir, 'delivery.private.b64url'), `${keys.private_key}\n`, { mode: 0o600 });
+  const privateKeyPath = join(outDir, 'delivery.private.b64url');
+  await writeFile(privateKeyPath, `${keys.private_key}\n`, { mode: 0o600 });
+  await chmod(privateKeyPath, 0o600);
   return {
     ok: true,
     out: outDir,
     public_key: keys.public_key,
     next_steps: [
-      `Add receive_public_key: ${keys.public_key} to creamlon.yaml extensions.delivery`,
+      `Add scheme: hpke-x25519-hkdf-sha256-aes256gcm-v2 and receive_public_key: ${keys.public_key} to creamlon.yaml extensions.delivery`,
+      'For presigned transport, also add presigned_hosts with the exact storage hostnames',
       'Keep delivery.private.b64url local',
     ],
   };
@@ -118,6 +121,22 @@ export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManife
     if (!opts.inputUploadUrl || !opts.outputUploadUrl || !opts.inputGetUrl || !opts.outputGetUrl) {
       throw usageError('presigned transport requires --input-upload-url, --input-get-url, --output-upload-url, --output-get-url');
     }
+    if (!manifestDelivery.presigned_hosts?.length) {
+      fail('node manifest requires extensions.delivery.presigned_hosts for presigned transport');
+    }
+    for (const value of [opts.inputUploadUrl, opts.outputUploadUrl]) {
+      let url;
+      try {
+        url = new URL(value);
+      } catch {
+        fail('presigned upload URLs must be valid HTTPS URLs');
+      }
+      const allowedHosts = manifestDelivery.presigned_hosts
+        .map((host) => String(host).toLowerCase());
+      if (url.protocol !== 'https:' || !allowedHosts.includes(url.hostname.toLowerCase())) {
+        fail(`presigned artifact host is not allowed: ${url.hostname}`);
+      }
+    }
   }
 
   const result = await prepareDelivery({
@@ -129,6 +148,7 @@ export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManife
     outputGetUrl: opts.outputGetUrl,
     github,
     outboxDir: opts.outboxDir || '.creamlon/outbox',
+    scheme: manifestDelivery.scheme,
   });
   const extensionsPath = opts.extensionsOut
     || join(dirname(result.outbox_path), `${result.request_id}.extensions.json`);
@@ -199,10 +219,19 @@ export async function cmdExtensionDeliverySendOutput(positional, opts, { loadMan
   if (!slug || !issueNumber) throw usageError('send-output requires <owner/repo> <issue-number>');
   if (!opts.outputFile) throw usageError('send-output requires --output-file');
   const token = resolveToken(opts);
-  const { owner, repo } = await loadManifestContext(slug, opts.ref);
+  const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
   const issue = await getIssue(owner, repo, issueNumber, token);
   const task = parseTask(issue.body || '');
-  const result = await sendOutput({ task, outputFile: resolve(opts.outputFile), token });
+  const deliveryErrors = validateTaskDelivery(task?.extensions?.delivery, {
+    manifestDelivery: parseManifestDelivery(parsed),
+  });
+  if (deliveryErrors.length) fail(`invalid task delivery extension: ${deliveryErrors.join('; ')}`);
+  const result = await sendOutput({
+    task,
+    outputFile: resolve(opts.outputFile),
+    token,
+    allowedPresignedHosts: parseManifestDelivery(parsed)?.presigned_hosts || null,
+  });
   printJson({ ok: true, request_id: task.request_id, issue_number: Number(issueNumber), ...result }, opts.pretty);
 }
 

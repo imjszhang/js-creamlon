@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -10,6 +10,7 @@ import {
   loadCredentialStore,
   parseCredential,
   taskIntentDigest,
+  updateCredentialStore,
   verifyCredentialAuthorization,
   validateRedemption,
   writeCredentialStore,
@@ -130,6 +131,34 @@ test('acceptance enforces credential policy and redemption uniqueness', () => {
   assert.deepEqual(accepted.errors, []);
   assert.equal(accepted.credential_ok, true);
 
+  const redemption = {
+    version: '1',
+    credential_id: generated.credential_id,
+    request_id: current.request_id,
+    credential_digest: accepted.credential_digest,
+    task_intent_digest: accepted.task_intent_digest,
+    capability_id: current.capability_id,
+    redeemed_at: '2026-06-14T00:00:00Z',
+  };
+  const resumed = validateTaskAcceptance(current, issue, {
+    manifest: MANIFEST,
+    credentialStore,
+    redemptions: [redemption],
+    checkIssueMeta: true,
+  });
+  assert.deepEqual(resumed.errors, []);
+
+  const changed = structuredClone(current);
+  changed.input.value = 'changed after redemption';
+  changed.credential = authorizeCredential(changed, MANIFEST, generated.value);
+  const rewritten = validateTaskAcceptance(changed, issue, {
+    manifest: MANIFEST,
+    credentialStore,
+    redemptions: [redemption],
+    checkIssueMeta: true,
+  });
+  assert.ok(rewritten.errors.includes('credential already redeemed'));
+
   const reused = validateTaskAcceptance(
     { ...current, request_id: 'req-paid-2' },
     issue,
@@ -146,6 +175,49 @@ test('acceptance enforces credential policy and redemption uniqueness', () => {
   assert.ok(reused.errors.some((error) => (
     error.includes('invalid credential authorization') || error.includes('already redeemed')
   )));
+});
+
+test('credential store updates serialize concurrent writers', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-credential-lock-'));
+  const path = join(dir, '.creamlon', 'credentials.json');
+  try {
+    await Promise.all(Array.from({ length: 8 }, (_, index) => (
+      updateCredentialStore(path, async (store) => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        store.credentials.push({
+          credential_id: `credential_${index}`,
+          secret: 'A'.repeat(43),
+          capability_id: 'review',
+          status: 'available',
+        });
+      })
+    )));
+    const store = await loadCredentialStore(path);
+    assert.equal(store.credentials.length, 8);
+    assert.equal(new Set(store.credentials.map((item) => item.credential_id)).size, 8);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('credential store recovers a stale writer lock', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-credential-stale-lock-'));
+  const path = join(dir, '.creamlon', 'credentials.json');
+  try {
+    await mkdir(join(dir, '.creamlon'), { recursive: true });
+    await writeFile(`${path}.lock`, '999999999\n', 'utf8');
+    await updateCredentialStore(path, (store) => {
+      store.credentials.push({
+        credential_id: 'stale_lock_1',
+        secret: 'A'.repeat(43),
+        capability_id: 'review',
+        status: 'available',
+      });
+    });
+    assert.equal((await loadCredentialStore(path)).credentials.length, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('credential store persists privately and validates records', async () => {

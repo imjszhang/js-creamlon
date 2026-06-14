@@ -12,7 +12,7 @@ Do not publish secrets or private input values in GitHub Issues.
 
 ## Private delivery extension
 
-When using `delivery-hpke-v1`:
+When using `delivery-hpke-v2`:
 
 1. `extension delivery prepare` — create task keys, extensions JSON, and outbox.
 2. `extension delivery send-input` — encrypt and upload input before or after submit.
@@ -28,7 +28,7 @@ outbox files or print GET URLs, ephemeral private keys, or artifact plaintext.
 When a capability requires credential access, the node operator creates:
 
 ```bash
-npx --yes creamlon@0.3.0 credential create \
+npx --yes creamlon@0.4.0 credential create \
   --repo-path . \
   --capability-id <id>
 ```
@@ -47,7 +47,7 @@ Free nodes need no key map. To require HMAC authorization, declare
 `profiles.authorization.scheme: hmac-sha256` and generate a customer key:
 
 ```bash
-npx --yes creamlon@0.3.0 hmac-key-new \
+npx --yes creamlon@0.4.0 hmac-key-new \
   --key-id customer-1 \
   --out .creamlon/authorization.keys.json
 ```

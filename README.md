@@ -177,7 +177,7 @@ file, release asset, object-storage URL, or another transport.
 ### Install the CLI
 
 ```bash
-npm install --global creamlon@0.3.0
+npm install --global creamlon@0.4.0
 creamlon help
 ```
 
@@ -331,7 +331,7 @@ Creamlon core stays small. Optional integrations live outside the normative
 protocol:
 
 - [Extensions overview](./extensions/README.md)
-- [Private delivery `delivery-hpke-v1`](./extensions/delivery-hpke-v1.md)
+- [Private delivery `delivery-hpke-v2`](./extensions/delivery-hpke-v2.md)
 - [Payment bridge pattern](./extensions/payment-bridge-v1.md)
 
 CLI helpers:
