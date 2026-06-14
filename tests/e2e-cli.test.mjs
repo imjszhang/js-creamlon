@@ -21,7 +21,7 @@ test('cli init keygen sign verify e2e', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-e2e-'));
   try {
     await runCli(['init', dir, '--name', 'e2e-agent']);
-    const manifestText = await readFile(join(dir, 'CREAMLON.md'), 'utf8');
+    const manifestText = await readFile(join(dir, 'creamlon.yaml'), 'utf8');
     assert.match(manifestText, /name: e2e-agent/);
 
     const gitignore = await readFile(join(dir, '.gitignore'), 'utf8');
@@ -112,8 +112,7 @@ test('cli init rejects non-empty directory', async () => {
 });
 
 test('parseManifest handles quoted name and multiple capabilities', () => {
-  const yaml = `---
-version: "1"
+  const yaml = `version: "1"
 name: "my agent"
 description: Demo
 identity:
@@ -137,7 +136,6 @@ profiles:
   github:
     transport: issues
 extensions: {}
----
 `;
   const parsed = parseManifest(yaml);
   assert.equal(parsed.name, 'my agent');
@@ -171,7 +169,7 @@ test('audit verifies a valid local proof log', async () => {
   try {
     await runCli(['init', dir, '--name', 'audit-agent']);
     const { privateKey, publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon'));
-    const agentPath = join(dir, 'CREAMLON.md');
+    const agentPath = join(dir, 'creamlon.yaml');
     const agentText = (await readFile(agentPath, 'utf8'))
       .replace('REPLACE_WITH_public.b64url', publicKeyBase64Url);
     await writeFile(agentPath, agentText, 'utf8');
@@ -206,7 +204,7 @@ test('status publishes audit health and key-rotate records continuity', async ()
     await runCli(['init', dir, '--name', 'status-agent']);
     const oldKeys = await generateKeyPair(join(dir, '.creamlon'));
     const newKeys = await generateKeyPair(null);
-    const agentPath = join(dir, 'CREAMLON.md');
+    const agentPath = join(dir, 'creamlon.yaml');
     const agentText = (await readFile(agentPath, 'utf8'))
       .replace('REPLACE_WITH_public.b64url', oldKeys.publicKeyBase64Url);
     await writeFile(agentPath, agentText, 'utf8');
@@ -252,7 +250,7 @@ test('key-rotate rejects a private key that does not match the old public key', 
     const oldKeys = await generateKeyPair(null);
     const wrongKeys = await generateKeyPair(join(dir, '.creamlon'));
     const newKeys = await generateKeyPair(null);
-    const agentPath = join(dir, 'CREAMLON.md');
+    const agentPath = join(dir, 'creamlon.yaml');
     const agentText = (await readFile(agentPath, 'utf8'))
       .replace('REPLACE_WITH_public.b64url', newKeys.publicKeyBase64Url);
     await writeFile(agentPath, agentText, 'utf8');

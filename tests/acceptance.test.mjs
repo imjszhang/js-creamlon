@@ -5,8 +5,7 @@ import { signHmacAuthorization } from '../lib/authorizationHmac.mjs';
 import { parseManifest } from '../lib/manifest.mjs';
 import { parseTask } from '../lib/task.mjs';
 
-const MANIFEST = parseManifest(`---
-version: "1"
+const MANIFEST = parseManifest(`version: "1"
 name: node
 identity:
   type: ed25519
@@ -24,7 +23,6 @@ profiles:
   authorization:
     scheme: hmac-sha256
 extensions: {}
----
 `);
 
 const BASE_TASK = parseTask(`version: "1"

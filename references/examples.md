@@ -9,7 +9,7 @@ creamlon init ./code-review-node --name code-review-node
 creamlon keygen --out ./code-review-node/.creamlon
 ```
 
-Bob places the generated public key in `CREAMLON.md`, pushes the repository
+Bob places the generated public key in `creamlon.yaml`, pushes the repository
 publicly, and adds the Topic `creamlon-node`.
 
 ## Discover and submit

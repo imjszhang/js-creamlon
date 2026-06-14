@@ -86,7 +86,7 @@ Commands:
   hash --file <path>                Hash file contents
   sign [options]                    Sign and output proof JSON
   verify [options]                  Verify proof signature
-  inspect <owner/repo>              Fetch and show CREAMLON.md
+  inspect <owner/repo>              Fetch and show creamlon.yaml
   discover <capability-id>          Find nodes via GitHub Topic search
   submit <owner/repo> [options]     Create task Issue (needs GITHUB_TOKEN)
   watch <owner/repo> [options]      List pending tasks (needs GITHUB_TOKEN)
@@ -107,7 +107,7 @@ Generate Ed25519 key pair. Writes public.key, private.key, public.b64url to --ou
 
 Options:
   --old-public-key <b64>  Previous public key
-  --new-public-key <b64>  New public key now published in CREAMLON.md
+  --new-public-key <b64>  New public key now published in creamlon.yaml
   --key <path>            Previous private key (default: .creamlon/private.key)
   --rotated-at <iso>      Optional rotation timestamp
   --repo-path <dir>       Node repository (default: .)
@@ -134,7 +134,7 @@ Options:
   verify: `creamlon verify [options]
 
 Options:
-  --repo <owner/repo>   Fetch identity from CREAMLON.md
+  --repo <owner/repo>   Fetch identity from creamlon.yaml
   --ref <branch>        Git branch (default: main)
   --token <pat>         Load key rotations for historical proofs
   --public-key <b64>    Or supply public key directly
@@ -142,7 +142,7 @@ Options:
   --pretty              Pretty-print JSON result`,
   inspect: `creamlon inspect <owner/repo> [--ref main]
 
-Fetch CREAMLON.md from GitHub and display capabilities.`,
+Fetch creamlon.yaml from GitHub and display capabilities.`,
   discover: `creamlon discover <capability-id> [options]
 
 Find nodes through the required GitHub Topic "creamlon-node".
@@ -171,7 +171,7 @@ Options:
   --authorization-key-id <id>  Required only when the node declares authorization
   --keys <path>                 Private HMAC key map
   --authorization-expires <iso>
-  --ref <branch>         CREAMLON.md branch (default: main)
+  --ref <branch>         creamlon.yaml branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
   --pretty               Pretty-print result JSON`,
   watch: `creamlon watch <owner/repo> [options]
@@ -179,7 +179,7 @@ Options:
 Options:
   --repo-path <dir>      Local node dir for proofs.log and HMAC keys
   --keys <path>          HMAC key map
-  --ref <branch>         CREAMLON.md branch (default: main)
+  --ref <branch>         creamlon.yaml branch (default: main)
   --once                 Poll once and exit (default)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
   --pretty               Pretty-print JSON`,
@@ -190,7 +190,7 @@ Options:
   --repo-path <dir>      Local node dir (default: .)
   --keys <path>          HMAC key map
   --key <path>           Private key (default: <repo-path>/.creamlon/private.key)
-  --ref <branch>         CREAMLON.md branch (default: main)
+  --ref <branch>         creamlon.yaml branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
   --dry-run              Print proof only; no GitHub or file writes
   --resume               Resume a partially completed delivery
@@ -201,19 +201,19 @@ Options:
   --reason <text>        Rejection reason (default: validation errors joined)
   --repo-path <dir>      Local node dir for proofs.log and HMAC keys
   --keys <path>          HMAC key map
-  --ref <branch>         CREAMLON.md branch (default: main)
+  --ref <branch>         creamlon.yaml branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
   --pretty               Pretty-print JSON`,
   fetchProof: `creamlon fetch-proof <owner/repo> <issue-number> [options]
 
 Options:
   --verify               Verify proof signature against the manifest identity
-  --ref <branch>         CREAMLON.md branch (default: main)
+  --ref <branch>         creamlon.yaml branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
   --pretty               Pretty-print JSON`,
   audit: `creamlon audit [--repo-path <dir>] [--pretty]
 
-Validate local CREAMLON.md and every proof in trust/proofs.log.`,
+Validate local creamlon.yaml and every proof in trust/proofs.log.`,
   status: `creamlon status [--repo-path <dir>] [--status-out <path>] [--pretty]
 
 Audit the node and write trust/status.json for discovery. The output path defaults to <repo-path>/trust/status.json.`,
@@ -304,7 +304,7 @@ async function loadManifestContext(slug, ref) {
   const { parsed } = await fetchManifest(owner, repo, ref || 'main');
   const manifestErrors = validateManifest(parsed, { requireGithubProfile: true });
   if (manifestErrors.length) {
-    fail(`invalid CREAMLON.md: ${manifestErrors.join('; ')}`);
+    fail(`invalid creamlon.yaml: ${manifestErrors.join('; ')}`);
   }
   return { owner, repo, parsed };
 }
@@ -320,7 +320,7 @@ async function cmdKeygen(opts) {
   const result = await generateKeyPair(outDir);
   console.log(`Keys written to ${outDir}/`);
   console.log(`public_key (base64url): ${result.publicKeyBase64Url}`);
-  console.log('Keep private.key secret; add public_key to CREAMLON.md');
+  console.log('Keep private.key secret; add public_key to creamlon.yaml');
 }
 
 async function cmdHash(positional, opts) {
@@ -369,9 +369,9 @@ async function cmdVerify(opts) {
     const { owner, repo } = parseRepoSlug(opts.repo);
     const { parsed } = await fetchManifest(owner, repo, opts.ref || 'main');
     const manifestErrors = validateManifest(parsed, { requireGithubProfile: true });
-    if (manifestErrors.length) fail(`invalid CREAMLON.md: ${manifestErrors.join('; ')}`);
+    if (manifestErrors.length) fail(`invalid creamlon.yaml: ${manifestErrors.join('; ')}`);
     publicKeyB64 = parsed.identity?.public_key;
-    if (!publicKeyB64) fail('CREAMLON.md has no identity.public_key');
+    if (!publicKeyB64) fail('creamlon.yaml has no identity.public_key');
     const token = resolveToken(opts);
     if (token) {
       const rotationsText = await getRepositoryFile(
@@ -821,7 +821,7 @@ async function cmdFetchProof(positional, opts) {
 
   if (opts.verify) {
     const currentPublicKey = parsed.identity?.public_key;
-    if (!currentPublicKey) fail('CREAMLON.md has no identity.public_key');
+    if (!currentPublicKey) fail('creamlon.yaml has no identity.public_key');
     const rotationsText = await getRepositoryFile(
       owner,
       repo,
@@ -850,7 +850,7 @@ async function cmdFetchProof(positional, opts) {
 }
 
 async function auditRepository(repoPath) {
-  const manifest = parseManifest(await readFile(join(repoPath, 'CREAMLON.md'), 'utf8'));
+  const manifest = parseManifest(await readFile(join(repoPath, 'creamlon.yaml'), 'utf8'));
   const manifestErrors = validateManifest(manifest, { requireGithubProfile: true });
   const rotationsText = await readFile(join(repoPath, 'trust', 'key-rotations.log'), 'utf8').catch((error) => {
     if (error.code === 'ENOENT') return '';
@@ -858,7 +858,7 @@ async function auditRepository(repoPath) {
   });
   const continuity = manifestErrors.length === 0
     ? inspectKeyContinuity(rotationsText, manifest.identity.public_key)
-    : { status: 'broken', errors: ['invalid CREAMLON.md'], history: [] };
+    : { status: 'broken', errors: ['invalid creamlon.yaml'], history: [] };
   const logText = await readFile(join(repoPath, 'trust', 'proofs.log'), 'utf8').catch((error) => {
     if (error.code === 'ENOENT') return '';
     throw error;
@@ -905,7 +905,7 @@ async function cmdAudit(opts) {
 
 async function cmdStatus(opts) {
   const repoPath = resolve(opts.repoPath || '.');
-  const manifest = parseManifest(await readFile(join(repoPath, 'CREAMLON.md'), 'utf8'));
+  const manifest = parseManifest(await readFile(join(repoPath, 'creamlon.yaml'), 'utf8'));
   const result = await auditRepository(repoPath);
   const status = {
     version: manifest.version,
@@ -935,11 +935,11 @@ async function cmdKeyRotate(opts) {
   if (signingPublicKey !== opts.oldPublicKey) {
     fail('private key does not match --old-public-key');
   }
-  const manifest = parseManifest(await readFile(join(repoPath, 'CREAMLON.md'), 'utf8'));
+  const manifest = parseManifest(await readFile(join(repoPath, 'creamlon.yaml'), 'utf8'));
   const manifestErrors = validateManifest(manifest, { requireGithubProfile: true });
-  if (manifestErrors.length) fail(`invalid CREAMLON.md: ${manifestErrors.join('; ')}`);
+  if (manifestErrors.length) fail(`invalid creamlon.yaml: ${manifestErrors.join('; ')}`);
   if (manifest.identity.public_key !== opts.newPublicKey) {
-    fail('--new-public-key must match CREAMLON.md identity.public_key');
+    fail('--new-public-key must match creamlon.yaml identity.public_key');
   }
   const logPath = join(repoPath, 'trust', 'key-rotations.log');
   const existingText = await readFile(logPath, 'utf8').catch((error) => {
@@ -1016,7 +1016,7 @@ async function cmdInit(positional, opts) {
   await copyTemplate(TEMPLATE_DIR, dest, name);
   console.log(`Created agent node at ${dest}`);
   console.log(`Next: creamlon keygen --out ${join(dest, '.creamlon')}`);
-  console.log('Then paste public_key into CREAMLON.md and push to GitHub.');
+  console.log('Then paste public_key into creamlon.yaml and push to GitHub.');
 }
 
 async function readStdin() {

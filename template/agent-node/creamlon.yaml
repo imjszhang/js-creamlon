@@ -1,4 +1,3 @@
----
 version: "1"
 name: {{name}}
 description: Agent capabilities exposed through the Creamlon GitHub profile.
@@ -19,8 +18,3 @@ profiles:
   github:
     transport: issues
 extensions: {}
----
-
-# {{name}}
-
-This node accepts Creamlon tasks through GitHub Issues.

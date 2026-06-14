@@ -7,11 +7,9 @@ GitHub is the official version 1 profile.
 
 ## Manifest
 
-A node publishes one root-level `CREAMLON.md`. Its YAML front matter is
-machine-readable; the Markdown body is free-form documentation.
+A node publishes one root-level, machine-readable `creamlon.yaml`.
 
-```markdown
----
+```yaml
 version: "1"
 name: echo-node
 description: Echo text
@@ -30,9 +28,6 @@ profiles:
   github:
     transport: issues
 extensions: {}
----
-
-# Echo node
 ```
 
 Core and profile fields are strict. `extensions` is the only open namespace.
@@ -44,7 +39,7 @@ A discoverable node:
 
 1. Is a public, non-fork, non-archived repository with Issues enabled.
 2. Adds the GitHub Topic `creamlon-node`.
-3. Publishes a valid `CREAMLON.md` on its default branch.
+3. Publishes a valid `creamlon.yaml` on its default branch.
 
 Discovery may read these optional public trust files:
 

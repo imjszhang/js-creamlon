@@ -16,8 +16,7 @@ import { signHmacAuthorization } from '../lib/authorizationHmac.mjs';
 import { serializeTask } from '../lib/task.mjs';
 import { signKeyRotation } from '../lib/identity.mjs';
 
-const MANIFEST_MD = `---
-version: "1"
+const MANIFEST_YAML = `version: "1"
 name: mock-node
 description: Mock
 identity:
@@ -37,11 +36,8 @@ profiles:
   authorization:
     scheme: hmac-sha256
 extensions: {}
----
-
-# Mock node
 `;
-const FREE_MANIFEST_MD = MANIFEST_MD.replace(
+const FREE_MANIFEST_YAML = MANIFEST_YAML.replace(
   '  authorization:\n    scheme: hmac-sha256\n',
   '',
 );
@@ -113,7 +109,7 @@ test('submit creates issue via mocked GitHub API', async () => {
 
   installMockFetch((url, init) => {
     if (url.includes('raw.githubusercontent.com')) {
-      return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', publicKeyBase64Url) };
+      return { status: 200, body: MANIFEST_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
     }
     if (url.endsWith('/issues') && init?.method === 'POST') {
       const body = JSON.parse(init.body);
@@ -151,7 +147,7 @@ test('submit requires an HMAC key', async () => {
 
   installMockFetch((url) => {
     if (url.includes('raw.githubusercontent.com')) {
-      return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', publicKeyBase64Url) };
+      return { status: 200, body: MANIFEST_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
     }
     return { status: 404, body: { message: 'not found' } };
   });
@@ -178,7 +174,7 @@ test('submit supports a free node without authorization options', async () => {
   const calls = [];
   installMockFetch((url, init) => {
     if (url.includes('raw.githubusercontent.com')) {
-      return { status: 200, body: FREE_MANIFEST_MD.replace('PLACEHOLDER', publicKeyBase64Url) };
+      return { status: 200, body: FREE_MANIFEST_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
     }
     if (url.endsWith('/issues') && init?.method === 'POST') {
       calls.push(JSON.parse(init.body));
@@ -218,7 +214,7 @@ test('deliver dry-run signs proof from mocked issue', async () => {
 
     installMockFetch((url, init) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: MANIFEST_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/42') && !url.includes('/comments')) {
         return { status: 200, body: { number: 42, body: issueBody, title: '[task] echo', state: 'open' } };
@@ -257,7 +253,7 @@ test('deliver rejects a tampered authorization', async () => {
 
     installMockFetch((url) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: MANIFEST_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/55')) {
         return { status: 200, body: { number: 55, body: issueBody, title: '[task] echo', state: 'open' } };
@@ -290,7 +286,7 @@ test('watch lists pending tasks with validation', async () => {
     if (url.includes('raw.githubusercontent.com')) {
       return {
         status: 200,
-        body: MANIFEST_MD.replace('PLACEHOLDER', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'),
+        body: MANIFEST_YAML.replace('PLACEHOLDER', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'),
       };
     }
     if (url.includes('/issues?')) {
@@ -332,7 +328,7 @@ test('deliver dry-run output contains proof hashes', async () => {
 
     installMockFetch((url) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: MANIFEST_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/99')) {
         return { status: 200, body: { number: 99, body: issueBody, title: '[task] echo', state: 'open' } };
@@ -379,7 +375,7 @@ test('deliver is resumable and idempotent across repeated execution', async () =
 
     installMockFetch((url, init) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: MANIFEST_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/77')) {
         if (init?.method === 'PATCH') {
@@ -432,7 +428,7 @@ test('reject comments and closes issue', async () => {
 
     installMockFetch((url, init) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: MANIFEST_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/12') && !url.includes('/comments')) {
         if (init?.method === 'PATCH') {
@@ -494,7 +490,7 @@ test('fetch-proof extracts and verifies proof from comments', async () => {
 
   installMockFetch((url) => {
     if (url.includes('raw.githubusercontent.com')) {
-      return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', currentKeys.publicKeyBase64Url) };
+      return { status: 200, body: MANIFEST_YAML.replace('PLACEHOLDER', currentKeys.publicKeyBase64Url) };
     }
     if (url.includes('/contents/trust/key-rotations.log')) {
       return {
@@ -575,7 +571,7 @@ test('GitHub discovery API searches the required topic and reads repository file
         body: { items: [{ full_name: 'owner/node' }] },
       };
     }
-    if (url.includes('/repos/owner/node/contents/CREAMLON.md')) {
+    if (url.includes('/repos/owner/node/contents/creamlon.yaml')) {
       return {
         status: 200,
         body: {
@@ -589,7 +585,7 @@ test('GitHub discovery API searches the required topic and reads repository file
   });
   try {
     const repos = await searchRepositories({ token: 'test-token', limit: 10 });
-    const text = await getRepositoryFile('owner', 'node', 'CREAMLON.md', 'main', 'test-token');
+    const text = await getRepositoryFile('owner', 'node', 'creamlon.yaml', 'main', 'test-token');
     assert.equal(repos[0].full_name, 'owner/node');
     assert.equal(text, 'name: node\n');
     assert.ok(urls.some((url) => url.includes('q=topic%3Acreamlon-node+is%3Apublic')));
@@ -602,7 +598,7 @@ test('GitHub discovery API searches the required topic and reads repository file
 test('inspect reports an invalid public key without crashing', async () => {
   installMockFetch((url) => {
     if (url.includes('raw.githubusercontent.com')) {
-      return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', 'invalid-key') };
+      return { status: 200, body: MANIFEST_YAML.replace('PLACEHOLDER', 'invalid-key') };
     }
     return { status: 404, body: { message: 'not found' } };
   });

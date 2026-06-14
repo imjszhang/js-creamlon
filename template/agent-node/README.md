@@ -8,7 +8,7 @@ Creamlon node published through this repository.
 creamlon keygen --out .creamlon
 ```
 
-1. Put `public.b64url` in `CREAMLON.md` at `identity.public_key`.
+1. Put `public.b64url` in `creamlon.yaml` at `identity.public_key`.
 2. Keep the repository public with GitHub Issues enabled.
 3. Add the GitHub Topic `creamlon-node`.
 4. Keep `.creamlon/` private and local.

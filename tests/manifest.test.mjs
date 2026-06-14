@@ -2,8 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseManifest, validateManifest } from '../lib/manifest.mjs';
 
-const YAML = `---
-version: "1"
+const YAML = `version: "1"
 name: agent
 description: Node
 identity:
@@ -23,9 +22,6 @@ profiles:
 extensions:
   mcp:
     server: https://example.com/mcp
----
-
-# Agent
 `;
 
 test('parseManifest reads the 1.0 manifest', () => {
@@ -38,20 +34,18 @@ test('parseManifest reads the 1.0 manifest', () => {
 });
 
 test('manifest rejects old wrapped schema and unknown core fields', () => {
-  const old = parseManifest(`---
-name: old
+  const old = parseManifest(`name: old
 creamlon:
   version: "0.3.1"
----
 `);
   const errors = validateManifest(old);
   assert.ok(errors.some((error) => error.includes('unsupported version')));
   assert.ok(errors.some((error) => error.includes('unknown manifest fields: creamlon')));
 });
 
-test('manifest requires YAML front matter and ignores Markdown body', () => {
-  assert.throws(() => parseManifest('version: "1"\n'), /expected YAML front matter/);
-  assert.equal(parseManifest(`${YAML}\nArbitrary prose.`).name, 'agent');
+test('manifest is plain YAML and rejects Markdown front matter', () => {
+  assert.equal(parseManifest(YAML).name, 'agent');
+  assert.throws(() => parseManifest(`---\n${YAML}---\n# Agent\n`), /invalid creamlon.yaml/);
 });
 
 test('manifest permits namespaced extensions but rejects unsupported profiles', () => {

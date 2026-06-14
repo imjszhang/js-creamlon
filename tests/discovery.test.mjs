@@ -18,8 +18,7 @@ import {
 import { hashText } from '../lib/hash.mjs';
 
 function manifestYaml(publicKey, status = 'available') {
-  return `---
-version: "1"
+  return `version: "1"
 name: echo-node
 description: Public echo service
 identity:
@@ -37,9 +36,6 @@ profiles:
   github:
     transport: issues
 extensions: {}
----
-
-# Echo node
 `;
 }
 
@@ -74,7 +70,7 @@ test('discoverRepositories validates, filters, and summarizes public trust files
     rotatedAt: '2026-06-12T00:00:00.000Z',
   }, oldKeys.privateKey);
   const files = new Map([
-    ['owner/good:CREAMLON.md', manifestYaml(currentKeys.publicKeyBase64Url)],
+    ['owner/good:creamlon.yaml', manifestYaml(currentKeys.publicKeyBase64Url)],
     ['owner/good:trust/proofs.log', `${JSON.stringify(proof)}\n`],
     ['owner/good:trust/key-rotations.log', `${JSON.stringify(rotation)}\n`],
     ['owner/good:trust/status.json', JSON.stringify({
@@ -83,7 +79,7 @@ test('discoverRepositories validates, filters, and summarizes public trust files
       checked_at: '2026-06-14T00:00:00.000Z',
       proofs_valid: true,
     })],
-    ['owner/offline:CREAMLON.md', manifestYaml(currentKeys.publicKeyBase64Url, 'offline')],
+    ['owner/offline:creamlon.yaml', manifestYaml(currentKeys.publicKeyBase64Url, 'offline')],
   ]);
 
   const result = await discoverRepositories([
@@ -128,7 +124,7 @@ test('discovery verifies historical proofs with the key active at completion tim
     rotatedAt: '2026-06-10T00:00:00.000Z',
   }, oldKeys.privateKey);
   const files = {
-    'CREAMLON.md': manifestYaml(currentKeys.publicKeyBase64Url),
+    'creamlon.yaml': manifestYaml(currentKeys.publicKeyBase64Url),
     'trust/proofs.log': `${JSON.stringify(proof)}\n`,
     'trust/key-rotations.log': `${JSON.stringify(rotation)}\n`,
   };

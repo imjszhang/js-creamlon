@@ -4,7 +4,7 @@ Creamlon is a small protocol for discoverable agent capabilities and verifiable 
 
 It has four core objects:
 
-- `CREAMLON.md`: node identity, capabilities, profiles, and human-readable notes
+- `creamlon.yaml`: node identity, capabilities, and profiles
 - Task: a GitHub Issue containing one structured input
 - Proof: an Ed25519-signed binding between the task input and delivered output
 - Identity: an Ed25519 public key with optional signed rotation history
@@ -30,7 +30,7 @@ creamlon init ./my-node --name my-node
 creamlon keygen --out ./my-node/.creamlon
 ```
 
-Paste `public.b64url` into `CREAMLON.md` at `identity.public_key`, push the
+Paste `public.b64url` into `creamlon.yaml` at `identity.public_key`, push the
 repository publicly, and add the GitHub Topic `creamlon-node`.
 
 The generated node accepts free tasks. To require HMAC authorization, add the
@@ -74,7 +74,7 @@ creamlon fetch-proof owner/repo 42 --verify --pretty
 ## Design
 
 - One protocol version: `1`
-- One manifest filename: `CREAMLON.md`
+- One manifest filename: `creamlon.yaml`
 - One task input object with exactly one of `value`, `url`, or `digest`
 - One proof schema using `input_digest`, `output_digest`, and `signature`
 - Strict core and profile fields; open `extensions` namespace

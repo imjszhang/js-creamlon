@@ -2,8 +2,8 @@
 
 ## 1.0.0
 
-- Replaced the legacy manifest with one root-level `CREAMLON.md`.
-- Added strict YAML front matter plus free-form Markdown documentation.
+- Replaced the legacy manifest with one root-level `creamlon.yaml`.
+- Added one strict, machine-readable YAML manifest.
 - Reduced the core protocol to manifest, task, proof, and identity.
 - Added the official GitHub discovery and Issues transport profile.
 - Unified task input as `media_type` plus exactly one of `value`, `url`, or `digest`.

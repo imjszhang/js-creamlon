@@ -34,7 +34,7 @@ creamlon submit owner/repo \
 Use `--input-url` for a public resource or `--input-digest` when only a content
 commitment should be published. Exactly one input location is allowed.
 
-When `CREAMLON.md` declares `profiles.authorization`, also supply:
+When `creamlon.yaml` declares `profiles.authorization`, also supply:
 
 ```bash
 --authorization-key-id customer-1 \
