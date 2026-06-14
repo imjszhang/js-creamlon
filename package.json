@@ -1,5 +1,5 @@
 {
-  "name": "js-creamlon",
+  "name": "creamlon",
   "version": "0.1.0",
   "description": "Creamlon: lightweight identity and proof layer for discoverable agent capabilities",
   "type": "module",

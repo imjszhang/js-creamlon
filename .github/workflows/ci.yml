@@ -35,8 +35,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx --yes skills@1.5.11 add . --list
-      - run: npx --yes skills@1.5.11 add . --skill js-creamlon --copy -a codex -y
-      - run: npx --yes skills@1.5.11 add . --skill creamlon-node --copy -a codex -y
+      - run: npx --yes skills@1.5.11 add . --skill creamlon-skill --copy -a codex -y
       - run: npm exec --package . -- creamlon hash test
 
   security-coverage:

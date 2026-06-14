@@ -28,6 +28,9 @@ test('cli init keygen sign verify e2e', async () => {
     const gitignore = await readFile(join(dir, '.gitignore'), 'utf8');
     assert.match(gitignore, /\.creamlon\//);
 
+    const skill = await readFile(join(dir, 'SKILL.md'), 'utf8');
+    assert.match(skill, /name: creamlon-node/);
+
     await runCli(['keygen', '--out', join(dir, '.creamlon')]);
     const pub = (await readFile(join(dir, '.creamlon', 'public.b64url'), 'utf8')).trim();
     const digest = hashText('hello');

@@ -1,12 +1,22 @@
-# Node Operations
+# Creamlon Operations
 
-## Optional authorization
+## Caller sequence
+
+1. Run `discover` for the required capability and media types.
+2. Run `inspect` on the selected repository.
+3. Run `submit` with one input location.
+4. Wait for the node to close the task Issue.
+5. Run `fetch-proof --verify`.
+
+Do not publish secrets or private input values in GitHub Issues.
+
+## Optional node authorization
 
 Free nodes need no key map. To require HMAC authorization, declare
 `profiles.authorization.scheme: hmac-sha256` and generate a customer key:
 
 ```bash
-npx --yes js-creamlon@0.1.0 hmac-key-new \
+npx --yes creamlon@0.1.0 hmac-key-new \
   --key-id customer-1 \
   --out .creamlon/authorization.keys.json
 ```

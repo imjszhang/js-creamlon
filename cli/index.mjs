@@ -990,7 +990,8 @@ async function copyTemplate(src, dest, name) {
   const entries = await readdir(src, { withFileTypes: true });
   for (const entry of entries) {
     const srcPath = join(src, entry.name);
-    const destPath = join(dest, entry.name);
+    const outputName = entry.name === 'SKILL.template.md' ? 'SKILL.md' : entry.name;
+    const destPath = join(dest, outputName);
     if (entry.isDirectory()) {
       await copyTemplate(srcPath, destPath, name);
     } else {

@@ -1,4 +1,4 @@
-# js-creamlon
+# Creamlon
 
 Creamlon is a small protocol for discoverable agent capabilities and verifiable task delivery on GitHub.
 
@@ -16,7 +16,7 @@ transport-neutral, so future profiles can be added without changing proofs.
 ## Install
 
 ```bash
-npm install --global js-creamlon@0.1.0
+npm install --global creamlon@0.1.0
 creamlon help
 ```
 
@@ -25,24 +25,14 @@ GitHub write operations require `GITHUB_TOKEN`, `GH_TOKEN`, or `--token`.
 
 ## Install Agent Skills
 
-Caller workflow:
-
 ```bash
 npx skills add imjszhang/js-creamlon \
-  --skill js-creamlon \
+  --skill creamlon-skill \
   -g -y
 ```
 
-Node operation workflow:
-
-```bash
-npx skills add imjszhang/js-creamlon \
-  --skill creamlon-node \
-  -g -y
-```
-
-The installed Skills run the published CLI with
-`npx --yes js-creamlon@0.1.0`, so a global CLI installation is optional.
+The installed Skill covers both caller and node workflows. It runs the published CLI with
+`npx --yes creamlon@0.1.0`, so a global CLI installation is optional.
 
 ## Create a node
 
@@ -110,8 +100,7 @@ caller saved previously.
 
 - [Protocol specification](references/protocol.md)
 - [Walkthrough](references/examples.md)
-- [Caller skill](skills/js-creamlon/SKILL.md)
-- [Node skill](skills/creamlon-node/SKILL.md)
+- [Agent skill](skills/creamlon-skill/SKILL.md)
 
 ## Test
 
