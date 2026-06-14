@@ -1,37 +1,72 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runCli } from '../cli/index.mjs';
-import { setGithubFetch } from '../lib/github.mjs';
+import {
+  getRepositoryFile,
+  searchRepositories,
+  setGithubFetch,
+} from '../lib/github.mjs';
 import { setAgentFetch } from '../lib/agentYaml.mjs';
 import { hashText } from '../lib/hash.mjs';
 import { buildProofFields, signProof, generateKeyPair } from '../lib/proof.mjs';
+import { signHmacPayment } from '../lib/payment.mjs';
+import { serializeTaskYaml } from '../lib/taskYaml.mjs';
 
 const AGENT_YAML = `name: mock-node
 description: Mock
 creamlon:
-  version: "0.2"
+  version: "0.3.1"
   public_key: PLACEHOLDER
+  status: available
+  payment_instructions: Contact operator
   capabilities:
     - id: echo
       description: Echo
+      input_types: [text/plain]
+      output_types: [text/plain]
 `;
 
-const PAID_AGENT_YAML = `name: paid-node
-description: Paid
-creamlon:
-  version: "0.3"
-  public_key: PLACEHOLDER
-  payment_required: true
-  payment_instructions: Contact operator for token
-  payment:
-    type: token
-  capabilities:
-    - id: echo
-      description: Echo
-`;
+const PAYMENT_KEY_ID = 'customer-1';
+const PAYMENT_SECRET = 'node-secret';
+const PAYMENT_EXPIRES = '2099-01-01T00:00:00Z';
+const PAYMENT_DIR = await mkdtemp(join(tmpdir(), 'creamlon-test-keys-'));
+const PAYMENT_KEYS_PATH = join(PAYMENT_DIR, 'payment.keys.json');
+await writeFile(PAYMENT_KEYS_PATH, `${JSON.stringify({ [PAYMENT_KEY_ID]: PAYMENT_SECRET })}\n`, 'utf8');
+after(() => rm(PAYMENT_DIR, { recursive: true, force: true }));
+
+function taskYaml({ requestId, input = 'hello', includePayment = true }) {
+  const task = {
+    request_id: requestId,
+    capability_id: 'echo',
+    requester: 'github:alice/caller',
+    input,
+    input_hash: null,
+    input_ref: null,
+    expires: null,
+    payment: null,
+  };
+  if (includePayment) {
+    task.payment = signHmacPayment(task, {
+      keyId: PAYMENT_KEY_ID,
+      secret: PAYMENT_SECRET,
+      expires: PAYMENT_EXPIRES,
+    });
+  }
+  return serializeTaskYaml(task);
+}
+
+const PAYMENT_ARGS = [
+  '--payment-key-id', PAYMENT_KEY_ID,
+  '--keys', PAYMENT_KEYS_PATH,
+  '--payment-expires', PAYMENT_EXPIRES,
+];
+
+const NODE_PAYMENT_ARGS = [
+  '--keys', PAYMENT_KEYS_PATH,
+];
 
 function installMockFetch(handler) {
   const fetchFn = async (url, init) => {
@@ -79,6 +114,7 @@ test('submit creates issue via mocked GitHub API', async () => {
       '--input', 'hello',
       '--requester', 'github:alice/caller',
       '--request-id', 'req-submit-1',
+      ...PAYMENT_ARGS,
       '--token', 'test-token',
     ]);
   } finally {
@@ -90,12 +126,12 @@ test('submit creates issue via mocked GitHub API', async () => {
   assert.match(calls[0].body, /req-submit-1/);
 });
 
-test('submit paid node requires payment json', async () => {
+test('submit requires an HMAC key', async () => {
   const { publicKeyBase64Url } = await generateKeyPair(null);
 
   installMockFetch((url) => {
     if (url.includes('raw.githubusercontent.com')) {
-      return { status: 200, body: PAID_AGENT_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
+      return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
     }
     return { status: 404, body: { message: 'not found' } };
   });
@@ -109,7 +145,7 @@ test('submit paid node requires payment json', async () => {
         '--requester', 'github:alice/caller',
         '--token', 'test-token',
       ]),
-      (err) => err.message.includes('missing payment'),
+      (err) => err.message.includes('--payment-key-id'),
     );
   } finally {
     resetFetch();
@@ -123,11 +159,7 @@ test('deliver dry-run signs proof from mocked issue', async () => {
     const outFile = join(dir, 'out.txt');
     await writeFile(outFile, 'result body', 'utf8');
 
-    const issueBody = `request_id: req-deliver-1
-capability_id: echo
-input: hello
-requester: github:alice/caller
-`;
+    const issueBody = taskYaml({ requestId: 'req-deliver-1' });
 
     installMockFetch((url, init) => {
       if (url.includes('raw.githubusercontent.com')) {
@@ -145,6 +177,7 @@ requester: github:alice/caller
         '--repo-path', dir,
         '--output-file', outFile,
         '--key', join(dir, '.creamlon', 'private.key'),
+        ...NODE_PAYMENT_ARGS,
         '--token', 'test-token',
         '--dry-run',
         '--pretty',
@@ -157,27 +190,18 @@ requester: github:alice/caller
   }
 });
 
-test('deliver rejects invalid payment on paid node', async () => {
+test('deliver rejects a tampered payment', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-deliver-paid-'));
   try {
     const keygen = await generateKeyPair(join(dir, '.creamlon'));
-    await writeFile(join(dir, '.creamlon', 'payment.token'), 'node-secret\n', 'utf8');
     const outFile = join(dir, 'out.txt');
     await writeFile(outFile, 'result body', 'utf8');
 
-    const issueBody = `request_id: req-deliver-paid
-capability_id: echo
-input: hello
-requester: github:alice/caller
-payment:
-  type: token
-  token: wrong-token
-  request_id: req-deliver-paid
-`;
+    const issueBody = taskYaml({ requestId: 'req-deliver-paid' }).replace('input: hello', 'input: tampered');
 
     installMockFetch((url) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: PAID_AGENT_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/55')) {
         return { status: 200, body: { number: 55, body: issueBody, title: '[task] echo', state: 'open' } };
@@ -192,9 +216,10 @@ payment:
           '--repo-path', dir,
           '--output-file', outFile,
           '--key', join(dir, '.creamlon', 'private.key'),
+          ...NODE_PAYMENT_ARGS,
           '--token', 'test-token',
         ]),
-        (err) => err.message.includes('invalid payment token'),
+        (err) => err.message.includes('invalid payment signature'),
       );
     } finally {
       resetFetch();
@@ -209,7 +234,7 @@ test('watch lists pending tasks with validation', async () => {
     if (url.includes('raw.githubusercontent.com')) {
       return {
         status: 200,
-        body: AGENT_YAML.replace('PLACEHOLDER', 'dGVzdA'),
+        body: AGENT_YAML.replace('PLACEHOLDER', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'),
       };
     }
     if (url.includes('/issues?')) {
@@ -219,7 +244,7 @@ test('watch lists pending tasks with validation', async () => {
           {
             number: 1,
             title: '[task] echo',
-            body: 'request_id: r1\ncapability_id: echo\ninput: hi\nrequester: github:a/b\n',
+            body: taskYaml({ requestId: 'r1', input: 'hi' }),
             html_url: 'https://github.com/o/r/issues/1',
           },
           {
@@ -235,7 +260,7 @@ test('watch lists pending tasks with validation', async () => {
   });
 
   try {
-    await runCli(['watch', 'owner/repo', '--token', 't', '--pretty']);
+    await runCli(['watch', 'owner/repo', ...NODE_PAYMENT_ARGS, '--token', 't', '--pretty']);
   } finally {
     resetFetch();
   }
@@ -247,11 +272,7 @@ test('deliver dry-run output contains proof hashes', async () => {
     const keygen = await generateKeyPair(join(dir, '.creamlon'));
     const outFile = join(dir, 'out.txt');
     await writeFile(outFile, 'result body', 'utf8');
-    const issueBody = `request_id: req-deliver-2
-capability_id: echo
-input: hello
-requester: github:alice/caller
-`;
+    const issueBody = taskYaml({ requestId: 'req-deliver-2' });
 
     installMockFetch((url) => {
       if (url.includes('raw.githubusercontent.com')) {
@@ -272,6 +293,7 @@ requester: github:alice/caller
         '--repo-path', dir,
         '--output-file', outFile,
         '--key', join(dir, '.creamlon', 'private.key'),
+        ...NODE_PAYMENT_ARGS,
         '--token', 'test-token',
         '--dry-run',
         '--pretty',
@@ -289,22 +311,72 @@ requester: github:alice/caller
   }
 });
 
+test('deliver is resumable and idempotent across repeated execution', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-deliver-idempotent-'));
+  const calls = [];
+  let issueState = 'open';
+  try {
+    const keygen = await generateKeyPair(join(dir, '.creamlon'));
+    const outFile = join(dir, 'out.txt');
+    await writeFile(outFile, 'result body', 'utf8');
+    const issueBody = taskYaml({ requestId: 'req-idempotent' });
+
+    installMockFetch((url, init) => {
+      if (url.includes('raw.githubusercontent.com')) {
+        return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+      }
+      if (url.endsWith('/issues/77')) {
+        if (init?.method === 'PATCH') {
+          issueState = 'closed';
+          calls.push('close');
+          return { status: 200, body: { number: 77, state: 'closed' } };
+        }
+        return {
+          status: 200,
+          body: { number: 77, body: issueBody, title: '[task] echo', state: issueState },
+        };
+      }
+      if (url.includes('/issues/77/comments?')) return { status: 200, body: [] };
+      if (url.endsWith('/issues/77/comments') && init?.method === 'POST') {
+        calls.push('comment');
+        return { status: 201, body: { id: 1 } };
+      }
+      return { status: 404, body: { message: 'not found' } };
+    });
+
+    try {
+      const args = [
+        'deliver', 'owner/repo', '77',
+        '--repo-path', dir,
+        '--output-file', outFile,
+        '--key', join(dir, '.creamlon', 'private.key'),
+        ...NODE_PAYMENT_ARGS,
+        '--token', 'test-token',
+      ];
+      await runCli(args);
+      await runCli([...args, '--resume']);
+    } finally {
+      resetFetch();
+    }
+
+    const lines = (await readFile(join(dir, 'trust', 'proofs.log'), 'utf8')).trim().split('\n');
+    assert.equal(lines.length, 1);
+    assert.deepEqual(calls, ['comment', 'close']);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('reject comments and closes issue', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-reject-'));
   const calls = [];
   try {
     const keygen = await generateKeyPair(join(dir, '.creamlon'));
-    await writeFile(join(dir, '.creamlon', 'payment.token'), 'node-secret\n', 'utf8');
-
-    const issueBody = `request_id: req-reject
-capability_id: echo
-input: hello
-requester: github:alice/caller
-`;
+    const issueBody = taskYaml({ requestId: 'req-reject', includePayment: false });
 
     installMockFetch((url, init) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: PAID_AGENT_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/12') && !url.includes('/comments')) {
         if (init?.method === 'PATCH') {
@@ -327,6 +399,7 @@ requester: github:alice/caller
       await runCli([
         'reject', 'owner/repo', '12',
         '--repo-path', dir,
+        ...NODE_PAYMENT_ARGS,
         '--token', 'test-token',
         '--pretty',
       ]);
@@ -361,10 +434,26 @@ test('fetch-proof extracts and verifies proof from comments', async () => {
     if (url.includes('raw.githubusercontent.com')) {
       return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
     }
-    if (url.endsWith('/issues/88/comments')) {
+    if (url.endsWith('/issues/88')) {
       return {
         status: 200,
-        body: [{ id: 1, created_at: '2026-06-13T12:00:00Z', body: commentBody }],
+        body: {
+          number: 88,
+          title: '[task] echo',
+          state: 'closed',
+          body: taskYaml({ requestId: 'req-fetch', input: 'in' }),
+        },
+      };
+    }
+    if (url.includes('/issues/88/comments?')) {
+      return {
+        status: 200,
+        body: [{
+          id: 1,
+          created_at: '2026-06-13T12:00:00Z',
+          author_association: 'OWNER',
+          body: commentBody,
+        }],
       };
     }
     return { status: 404, body: { message: 'not found' } };
@@ -391,14 +480,48 @@ test('fetch-proof extracts and verifies proof from comments', async () => {
   assert.equal(out.verify.ok, true);
 });
 
-test('token-new writes payment token file', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'creamlon-token-new-'));
+test('payment-key-new creates a private HMAC key', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-hmac-key-'));
   try {
-    const outPath = join(dir, '.creamlon', 'payment.token');
-    await runCli(['token-new', '--out', outPath]);
-    const content = await readFile(outPath, 'utf8');
-    assert.match(content.trim(), /^[0-9a-f]{64}$/);
+    const keysPath = join(dir, 'payment.keys.json');
+    await runCli(['payment-key-new', '--key-id', 'customer-1', '--out', keysPath]);
+    const keys = JSON.parse(await readFile(keysPath, 'utf8'));
+    assert.match(keys['customer-1'], /^[A-Za-z0-9_-]+$/);
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('GitHub discovery API searches the required topic and reads repository files', async () => {
+  const urls = [];
+  installMockFetch((url) => {
+    urls.push(url);
+    if (url.includes('/search/repositories?')) {
+      return {
+        status: 200,
+        body: { items: [{ full_name: 'owner/node' }] },
+      };
+    }
+    if (url.includes('/repos/owner/node/contents/agent.yaml')) {
+      return {
+        status: 200,
+        body: {
+          type: 'file',
+          encoding: 'base64',
+          content: Buffer.from('name: node\n').toString('base64'),
+        },
+      };
+    }
+    return { status: 404, body: { message: 'not found' } };
+  });
+  try {
+    const repos = await searchRepositories({ token: 'test-token', limit: 10 });
+    const text = await getRepositoryFile('owner', 'node', 'agent.yaml', 'main', 'test-token');
+    assert.equal(repos[0].full_name, 'owner/node');
+    assert.equal(text, 'name: node\n');
+    assert.ok(urls.some((url) => url.includes('q=topic%3Acreamlon-node')));
+    assert.ok(urls.some((url) => url.includes('ref=main')));
+  } finally {
+    resetFetch();
   }
 });

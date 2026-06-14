@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractProofFromCommentBody, extractProofFromComments } from '../lib/proofComment.mjs';
+import {
+  extractBoundProofFromComments,
+  extractProofFromCommentBody,
+  extractProofFromComments,
+} from '../lib/proofComment.mjs';
 import { buildProofFields, signProof, generateKeyPair } from '../lib/proof.mjs';
 import { hashText } from '../lib/hash.mjs';
 
@@ -52,4 +56,33 @@ test('extractProofFromComments returns latest proof comment', async () => {
 
 test('extractProofFromComments returns null when no proof', () => {
   assert.equal(extractProofFromComments([{ body: 'no proof here' }]), null);
+});
+
+test('extractBoundProofFromComments rejects cross-issue replay and untrusted author', async () => {
+  const { privateKey } = await generateKeyPair(null);
+  const proof = signProof(buildProofFields({
+    requestId: 'other-request',
+    capabilityId: 'echo',
+    inputHash: hashText('in'),
+    outputHash: hashText('out'),
+    completedAt: '2026-06-13T00:00:00.000Z',
+  }), privateKey);
+  const body = `\`\`\`json\n${JSON.stringify(proof)}\n\`\`\``;
+  const task = { request_id: 'expected', capability_id: 'echo' };
+  const replay = extractBoundProofFromComments(
+    [{ id: 1, author_association: 'OWNER', body }],
+    task,
+    hashText('in'),
+  );
+  assert.equal(replay.proof, null);
+  assert.ok(replay.errors.some((error) => error.includes('request_id')));
+
+  const matching = { ...proof, request_id: 'expected' };
+  const untrusted = extractBoundProofFromComments(
+    [{ id: 2, author_association: 'NONE', body: `\`\`\`json\n${JSON.stringify(matching)}\n\`\`\`` }],
+    task,
+    hashText('in'),
+  );
+  assert.equal(untrusted.proof, null);
+  assert.ok(untrusted.errors.some((error) => error.includes('untrusted')));
 });

@@ -9,6 +9,7 @@ import { parseProofJson, publicKeyFromBase64Url, verifyProof, signProof, buildPr
 import { hashText, hashDigestError } from '../lib/hash.mjs';
 import { parseAgentYaml } from '../lib/agentYaml.mjs';
 import { parseProofsLog } from '../lib/proofsLog.mjs';
+import { verifyKeyContinuity } from '../lib/identity.mjs';
 
 const BIN = join(process.cwd(), 'bin', 'creamlon.mjs');
 
@@ -77,6 +78,12 @@ test('cli sign rejects invalid hash format', () => {
   assert.match(sign.stderr, /invalid input_hash/);
 });
 
+test('cli rejects option without a value', () => {
+  const result = runCreamlon(['inspect', 'owner/repo', '--token']);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /--token requires a value/);
+});
+
 test('cli init rejects file path', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-init-'));
   const filePath = join(dir, 'not-a-dir');
@@ -108,13 +115,19 @@ test('parseAgentYaml handles quoted name and multiple capabilities', () => {
   const yaml = `name: "my agent"
 description: Demo
 creamlon:
-  version: "0.1"
-  public_key: abc123
+  version: "0.3.1"
+  public_key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  status: available
+  payment_instructions: Contact operator
   capabilities:
     - id: echo
       description: Echo
+      input_types: [text/plain]
+      output_types: [text/plain]
     - id: review
       description: Review
+      input_types: [text/uri-list]
+      output_types: [text/markdown]
 `;
   const parsed = parseAgentYaml(yaml);
   assert.equal(parsed.name, 'my agent');
@@ -141,4 +154,69 @@ test('parseProofsLog skips comments and blank lines', async () => {
   const parsed = parseProofsLog(log);
   assert.equal(parsed.length, 1);
   assert.equal(parsed[0].request_id, 'req-log');
+});
+
+test('audit verifies a valid local proof log', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-audit-'));
+  try {
+    await runCli(['init', dir, '--name', 'audit-agent']);
+    const { privateKey, publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon'));
+    const agentPath = join(dir, 'agent.yaml');
+    const agentText = (await readFile(agentPath, 'utf8'))
+      .replace('REPLACE_WITH_public.b64url', publicKeyBase64Url);
+    await writeFile(agentPath, agentText, 'utf8');
+    const proof = signProof(buildProofFields({
+      requestId: 'req-audit',
+      capabilityId: 'echo',
+      inputHash: hashText('in'),
+      outputHash: hashText('out'),
+      completedAt: '2026-06-13T00:00:00.000Z',
+    }), privateKey);
+    await writeFile(join(dir, 'trust', 'proofs.log'), `${JSON.stringify(proof)}\n`, 'utf8');
+
+    const logs = [];
+    const originalLog = console.log;
+    console.log = (message) => logs.push(message);
+    try {
+      await runCli(['audit', '--repo-path', dir, '--pretty']);
+    } finally {
+      console.log = originalLog;
+    }
+    const result = JSON.parse(logs.join('\n'));
+    assert.equal(result.ok, true);
+    assert.equal(result.proof_count, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('status publishes audit health and key-rotate records continuity', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-status-'));
+  try {
+    await runCli(['init', dir, '--name', 'status-agent']);
+    const oldKeys = await generateKeyPair(join(dir, '.creamlon'));
+    const newKeys = await generateKeyPair(null);
+    const agentPath = join(dir, 'agent.yaml');
+    const agentText = (await readFile(agentPath, 'utf8'))
+      .replace('REPLACE_WITH_public.b64url', oldKeys.publicKeyBase64Url);
+    await writeFile(agentPath, agentText, 'utf8');
+
+    await runCli(['status', '--repo-path', dir]);
+    const status = JSON.parse(await readFile(join(dir, 'trust', 'status.json'), 'utf8'));
+    assert.equal(status.v, '0.3.1');
+    assert.equal(status.status, 'available');
+    assert.equal(status.proofs_valid, true);
+
+    await runCli([
+      'key-rotate',
+      '--repo-path', dir,
+      '--old-public-key', oldKeys.publicKeyBase64Url,
+      '--new-public-key', newKeys.publicKeyBase64Url,
+      '--rotated-at', '2026-06-14T00:00:00.000Z',
+    ]);
+    const rotations = await readFile(join(dir, 'trust', 'key-rotations.log'), 'utf8');
+    assert.equal(verifyKeyContinuity(rotations, newKeys.publicKeyBase64Url).status, 'verified');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

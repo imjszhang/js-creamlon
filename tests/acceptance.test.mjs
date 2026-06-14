@@ -1,17 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateTaskAcceptance } from '../lib/acceptance.mjs';
+import { signHmacPayment } from '../lib/payment.mjs';
 
 const AGENT = {
   name: 'node',
   description: 'd',
   creamlon: {
-    version: '0.3',
-    public_key: 'dGVzdA',
-    payment_required: true,
-    payment_instructions: 'get token',
-    payment: { type: 'token' },
-    capabilities: [{ id: 'echo', description: 'echo' }],
+    version: '0.3.1',
+    public_key: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    status: 'available',
+    payment_instructions: 'contact operator',
+    capabilities: [{
+      id: 'echo',
+      description: 'echo',
+      input_types: ['text/plain'],
+      output_types: ['text/plain'],
+    }],
   },
 };
 
@@ -23,66 +28,57 @@ const BASE_TASK = {
   input_hash: null,
   input_ref: null,
   expires: null,
-  payment: {
-    type: 'token',
-    token: 'good-token',
-    request_id: 'req-1',
-  },
+  payment: null,
+};
+BASE_TASK.payment = signHmacPayment(BASE_TASK, {
+  keyId: 'customer-1',
+  secret: 'secret',
+  expires: '2099-01-01T00:00:00Z',
+});
+
+const OPTIONS = {
+  agentParsed: AGENT,
+  paymentSecrets: { hmacKeys: new Map([['customer-1', 'secret']]) },
+  checkIssueMeta: true,
 };
 
-test('validateTaskAcceptance passes valid paid task', () => {
+test('validateTaskAcceptance passes a valid task', () => {
   const result = validateTaskAcceptance(BASE_TASK, { title: '[task] echo', state: 'open' }, {
-    agentParsed: AGENT,
+    ...OPTIONS,
     processedIds: new Set(),
-    paymentSecrets: { tokens: new Set(['good-token']) },
-    checkIssueMeta: true,
   });
   assert.equal(result.errors.length, 0);
   assert.equal(result.payment_ok, true);
 });
 
 test('validateTaskAcceptance rejects expired task', () => {
-  const task = {
-    ...BASE_TASK,
-    expires: '2020-01-01T00:00:00Z',
-  };
-  const result = validateTaskAcceptance(task, { title: '[task] echo', state: 'open' }, {
-    agentParsed: AGENT,
-    paymentSecrets: { tokens: new Set(['good-token']) },
-    checkIssueMeta: true,
-  });
-  assert.ok(result.errors.some((e) => e.includes('expired')));
+  const result = validateTaskAcceptance(
+    { ...BASE_TASK, expires: '2020-01-01T00:00:00Z' },
+    { title: '[task] echo', state: 'open' },
+    OPTIONS,
+  );
+  assert.ok(result.errors.some((error) => error.includes('expired')));
 });
 
 test('validateTaskAcceptance rejects duplicate request_id', () => {
   const result = validateTaskAcceptance(BASE_TASK, { title: '[task] echo', state: 'open' }, {
-    agentParsed: AGENT,
+    ...OPTIONS,
     processedIds: new Set(['req-1']),
-    paymentSecrets: { tokens: new Set(['good-token']) },
-    checkIssueMeta: true,
   });
-  assert.ok(result.errors.some((e) => e.includes('duplicate')));
+  assert.ok(result.errors.some((error) => error.includes('duplicate')));
 });
 
-test('validateTaskAcceptance rejects invalid payment token', () => {
-  const task = {
-    ...BASE_TASK,
-    payment: { ...BASE_TASK.payment, token: 'wrong' },
-  };
-  const result = validateTaskAcceptance(task, { title: '[task] echo', state: 'open' }, {
-    agentParsed: AGENT,
-    paymentSecrets: { tokens: new Set(['good-token']) },
-    checkIssueMeta: true,
-  });
+test('validateTaskAcceptance rejects a tampered payment', () => {
+  const result = validateTaskAcceptance(
+    { ...BASE_TASK, capability_id: 'review' },
+    { title: '[task] review', state: 'open' },
+    OPTIONS,
+  );
   assert.equal(result.payment_ok, false);
-  assert.ok(result.errors.some((e) => e.includes('invalid payment token')));
+  assert.ok(result.errors.some((error) => error.includes('invalid payment signature')));
 });
 
 test('validateTaskAcceptance rejects closed issue', () => {
-  const result = validateTaskAcceptance(BASE_TASK, { title: '[task] echo', state: 'closed' }, {
-    agentParsed: AGENT,
-    paymentSecrets: { tokens: new Set(['good-token']) },
-    checkIssueMeta: true,
-  });
-  assert.ok(result.errors.some((e) => e.includes('not open')));
+  const result = validateTaskAcceptance(BASE_TASK, { title: '[task] echo', state: 'closed' }, OPTIONS);
+  assert.ok(result.errors.some((error) => error.includes('not open')));
 });

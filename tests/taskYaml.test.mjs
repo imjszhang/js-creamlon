@@ -18,15 +18,20 @@ input: hello
 requester: github:alice/repo
 expires: 2026-12-31T00:00:00Z
 payment:
-  type: evm
-  txid: "0xabc"
+  key_id: customer-1
+  expires: 2099-01-01T00:00:00Z
+  signature: abc
 `;
   const task = parseTaskYaml(yaml);
   assert.equal(task.request_id, 'req-1');
   assert.equal(task.capability_id, 'echo');
   assert.equal(task.input, 'hello');
   assert.equal(task.expires, '2026-12-31T00:00:00Z');
-  assert.deepEqual(task.payment, { type: 'evm', txid: '0xabc' });
+  assert.deepEqual(task.payment, {
+    key_id: 'customer-1',
+    expires: '2099-01-01T00:00:00Z',
+    signature: 'abc',
+  });
 });
 
 test('parseTaskYaml reads input_ref', () => {
@@ -56,12 +61,12 @@ test('validateTaskYaml rejects ambiguous input', () => {
   assert.ok(errors.some((e) => e.includes('ambiguous input')));
 });
 
-test('validateTaskYaml requires payment when payment_required', () => {
+test('validateTaskYaml requires payment', () => {
   const task = parseTaskYaml(`request_id: r
 capability_id: echo
 input: hi
 requester: github:a/b`);
-  const errors = validateTaskYaml(task, { payment_required: true });
+  const errors = validateTaskYaml(task);
   assert.ok(errors.some((e) => e.includes('missing payment')));
 });
 
@@ -89,7 +94,7 @@ test('serializeTaskYaml roundtrip core fields', () => {
     input_hash: null,
     input_ref: null,
     expires: '2026-12-31T00:00:00Z',
-    payment: { type: 'evm', txid: '0x1' },
+    payment: { key_id: 'customer-1', expires: '2099-01-01T00:00:00Z', signature: 'abc' },
   };
   const reparsed = parseTaskYaml(serializeTaskYaml(task));
   assert.equal(reparsed.request_id, task.request_id);
@@ -97,6 +102,44 @@ test('serializeTaskYaml roundtrip core fields', () => {
   assert.equal(reparsed.input, task.input);
   assert.equal(reparsed.expires, task.expires);
   assert.deepEqual(reparsed.payment, task.payment);
+});
+
+test('serializeTaskYaml preserves quotes, unicode, comments, and multiline text', () => {
+  const input = 'say "hello": # literal\n第二行\\path';
+  const task = {
+    request_id: 'req-special',
+    capability_id: 'echo',
+    requester: 'github:alice/repo',
+    input,
+    input_hash: null,
+    input_ref: null,
+    expires: null,
+    payment: null,
+  };
+  const reparsed = parseTaskYaml(serializeTaskYaml(task));
+  assert.equal(reparsed.input, input);
+  assert.equal(resolveInputHash(reparsed), resolveInputHash(task));
+});
+
+test('parseTaskYaml rejects duplicate fields', () => {
+  assert.throws(
+    () => parseTaskYaml('request_id: one\nrequest_id: two\n'),
+    /Map keys must be unique/,
+  );
+});
+
+test('validateTaskYaml rejects unknown payment fields', () => {
+  const task = parseTaskYaml(`request_id: r
+capability_id: echo
+requester: github:a/b
+input: hello
+payment:
+  key_id: k
+  expires: 2099-01-01T00:00:00Z
+  signature: sig
+  secret: leaked
+`);
+  assert.ok(validateTaskYaml(task).some((error) => error.includes('unknown payment fields')));
 });
 
 test('task issue title helpers', () => {

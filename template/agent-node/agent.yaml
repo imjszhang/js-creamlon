@@ -1,12 +1,14 @@
 ﻿name: {{name}}
 description: Creamlon agent node exposing verifiable capabilities via GitHub Issues.
 creamlon:
-  version: "0.3"
+  version: "0.3.1"
   public_key: "REPLACE_WITH_public.b64url"
-  payment_required: true
-  payment_instructions: "Contact the node operator for a payment token. Submit payment.type token with request_id binding in the task Issue."
-  payment:
-    type: token
+  status: available
+  payment_instructions: "Obtain a short-lived HMAC payment credential from the node operator."
   capabilities:
     - id: echo
       description: Echo the input text back
+      input_types:
+        - text/plain
+      output_types:
+        - text/plain

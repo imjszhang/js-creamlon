@@ -23,7 +23,7 @@ test('canonicalPayload stable key order', () => {
   const payload = canonicalPayload(fields);
   assert.equal(
     payload,
-    '{"v":"0.1","request_id":"req-1","capability_id":"echo","input_hash":"sha256:aa","output_hash":"sha256:bb","completed_at":"2026-06-13T00:00:00.000Z"}',
+    '{"v":"0.3.1","request_id":"req-1","capability_id":"echo","input_hash":"sha256:aa","output_hash":"sha256:bb","completed_at":"2026-06-13T00:00:00.000Z"}',
   );
 });
 
@@ -68,7 +68,7 @@ test('verify rejects unsupported protocol version', async () => {
     completedAt: '2026-06-13T00:00:00.000Z',
   });
   const proof = signProof(fields, privateKey);
-  proof.v = '0.2';
+  proof.v = '0.3.0';
   const result = verifyProof(proof, publicKey);
   assert.equal(result.ok, false);
   assert.match(result.reason, /unsupported protocol version/);
@@ -109,16 +109,20 @@ test('parseAgentYaml reads creamlon block', () => {
   const yaml = `name: demo-agent
 description: Demo node
 creamlon:
-  version: "0.1"
-  public_key: abc123
+  version: "0.3.1"
+  public_key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  status: available
+  payment_instructions: Contact operator
   capabilities:
     - id: echo
       description: Echo input
+      input_types: [text/plain]
+      output_types: [text/plain]
 `;
   const parsed = parseAgentYaml(yaml);
   assert.equal(parsed.name, 'demo-agent');
-  assert.equal(parsed.creamlon.version, '0.1');
-  assert.equal(parsed.creamlon.public_key, 'abc123');
+  assert.equal(parsed.creamlon.version, '0.3.1');
+  assert.equal(parsed.creamlon.public_key, 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
   assert.equal(parsed.creamlon.capabilities.length, 1);
   assert.equal(parsed.creamlon.capabilities[0].id, 'echo');
 });
