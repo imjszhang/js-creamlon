@@ -1,7 +1,8 @@
 # Changelog
 
-## 1.0.0
+## 0.1.0
 
+- Published npm and CLI release version `0.1.0`; protocol schema version remains `"1"`.
 - Replaced the legacy manifest with one root-level `creamlon.yaml`.
 - Added one strict, machine-readable YAML manifest.
 - Reduced the core protocol to manifest, task, proof, and identity.
@@ -10,5 +11,5 @@
 - Standardized protocol objects on version `1` and explicit digest/signature names.
 - Made HMAC authorization an optional declared profile; free nodes are supported.
 - Reserved `extensions` as the open namespace for future integrations.
-- Removed compatibility parsing and commands for pre-1.0 formats.
+- Removed compatibility parsing and commands for legacy formats.
 - Preserved signed proofs, key rotation continuity, resumable delivery, and local audit.

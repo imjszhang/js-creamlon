@@ -83,3 +83,18 @@ test('acceptance rejects expiry, duplicates, tampering, and closed issues', () =
     OPTIONS,
   ).errors.some((error) => error.includes('not open')));
 });
+
+test('acceptance reports malformed authorization input without throwing', () => {
+  const malformed = {
+    ...BASE_TASK,
+    input: null,
+    authorization: { ...BASE_TASK.authorization },
+  };
+  const result = validateTaskAcceptance(
+    malformed,
+    { title: '[task] echo', state: 'open' },
+    OPTIONS,
+  );
+  assert.ok(result.errors.includes('missing input'));
+  assert.ok(result.errors.some((error) => error.startsWith('invalid authorization binding:')));
+});

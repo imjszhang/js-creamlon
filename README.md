@@ -16,12 +16,33 @@ transport-neutral, so future profiles can be added without changing proofs.
 ## Install
 
 ```bash
-npm install
-npm link
+npm install --global js-creamlon@0.1.0
 creamlon help
 ```
 
-Requires Node.js 18+. GitHub write operations require `GITHUB_TOKEN`.
+Requires Node.js 18+. Public reads can run anonymously but are rate-limited.
+GitHub write operations require `GITHUB_TOKEN`, `GH_TOKEN`, or `--token`.
+
+## Install Agent Skills
+
+Caller workflow:
+
+```bash
+npx skills add imjszhang/js-creamlon \
+  --skill js-creamlon \
+  -g -y
+```
+
+Node operation workflow:
+
+```bash
+npx skills add imjszhang/js-creamlon \
+  --skill creamlon-node \
+  -g -y
+```
+
+The installed Skills run the published CLI with
+`npx --yes js-creamlon@0.1.0`, so a global CLI installation is optional.
 
 ## Create a node
 
@@ -89,7 +110,8 @@ caller saved previously.
 
 - [Protocol specification](references/protocol.md)
 - [Walkthrough](references/examples.md)
-- [Caller skill](SKILL.md)
+- [Caller skill](skills/js-creamlon/SKILL.md)
+- [Node skill](skills/creamlon-node/SKILL.md)
 
 ## Test
 

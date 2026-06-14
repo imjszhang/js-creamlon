@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runCli } from '../cli/index.mjs';
 import {
+  createIssue,
   getRepositoryFile,
   searchRepositories,
   setGithubFetch,
@@ -101,6 +102,13 @@ function resetFetch() {
   setGithubFetch(globalThis.fetch);
   setManifestFetch(globalThis.fetch);
 }
+
+test('GitHub writes require authentication while public reads may be anonymous', async () => {
+  await assert.rejects(
+    () => createIssue('owner', 'repo', 'title', 'body', null),
+    /GitHub token required/,
+  );
+});
 
 test('submit creates issue via mocked GitHub API', async () => {
   const calls = [];
@@ -584,8 +592,8 @@ test('GitHub discovery API searches the required topic and reads repository file
     return { status: 404, body: { message: 'not found' } };
   });
   try {
-    const repos = await searchRepositories({ token: 'test-token', limit: 10 });
-    const text = await getRepositoryFile('owner', 'node', 'creamlon.yaml', 'main', 'test-token');
+    const repos = await searchRepositories({ limit: 10 });
+    const text = await getRepositoryFile('owner', 'node', 'creamlon.yaml', 'main');
     assert.equal(repos[0].full_name, 'owner/node');
     assert.equal(text, 'name: node\n');
     assert.ok(urls.some((url) => url.includes('q=topic%3Acreamlon-node+is%3Apublic')));

@@ -12,6 +12,7 @@ import { parseProofsLog } from '../lib/proofsLog.mjs';
 import { verifyKeyContinuity } from '../lib/identity.mjs';
 
 const BIN = join(process.cwd(), 'bin', 'creamlon.mjs');
+const PACKAGE_VERSION = JSON.parse(await readFile(join(process.cwd(), 'package.json'), 'utf8')).version;
 
 function runCreamlon(args) {
   return spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', cwd: process.cwd() });
@@ -63,6 +64,12 @@ test('cli hash joins multiple words', async () => {
   const viaCli = runCreamlon(['hash', 'hello', 'world']);
   assert.equal(viaCli.status, 0, viaCli.stderr);
   assert.equal(viaCli.stdout.trim(), hashText('hello world'));
+});
+
+test('cli help reads its version from package metadata', () => {
+  const result = runCreamlon(['help']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, new RegExp(`v${PACKAGE_VERSION.replaceAll('.', '\\.')}`));
 });
 
 test('cli sign rejects invalid hash format', () => {

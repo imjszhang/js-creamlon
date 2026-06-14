@@ -1,15 +1,16 @@
 {
   "name": "js-creamlon",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Creamlon: lightweight identity and proof layer for discoverable agent capabilities",
   "type": "module",
   "bin": {
-    "creamlon": "./bin/creamlon.mjs"
+    "creamlon": "bin/creamlon.mjs"
   },
   "scripts": {
     "test": "node --test tests/**/*.test.mjs",
     "check": "node --check cli/index.mjs && npm test",
-    "coverage:security": "node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-include=lib/authorizationHmac.mjs --test-coverage-include=lib/proofComment.mjs --test tests/**/*.test.mjs"
+    "coverage:security": "node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-include=lib/authorizationHmac.mjs --test-coverage-include=lib/proofComment.mjs --test tests/**/*.test.mjs",
+    "prepublishOnly": "npm run check && npm run coverage:security"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -19,13 +20,32 @@
   },
   "license": "MIT",
   "author": "imjszhang",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imjszhang/js-creamlon.git"
+  },
+  "homepage": "https://github.com/imjszhang/js-creamlon#readme",
+  "bugs": {
+    "url": "https://github.com/imjszhang/js-creamlon/issues"
+  },
+  "keywords": [
+    "agent",
+    "agent-skills",
+    "ai-agent",
+    "creamlon",
+    "github",
+    "protocol"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "bin",
     "cli",
     "lib",
     "template",
     "references",
-    "SKILL.md",
+    "skills",
     "README.md",
     "CHANGELOG.md",
     "SECURITY.md"

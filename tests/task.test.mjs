@@ -52,7 +52,7 @@ test('resolveInputDigest hashes values and URLs or preserves digest', () => {
   assert.equal(resolveInputDigest({ input: { digest } }), digest);
 });
 
-test('serializeTask roundtrips the 1.0 task', () => {
+test('serializeTask roundtrips the version 1 task', () => {
   const task = parseTask(YAML);
   const reparsed = parseTask(serializeTask(task));
   assert.equal(reparsed.input.value, 'hello');

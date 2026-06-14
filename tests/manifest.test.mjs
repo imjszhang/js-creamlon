@@ -24,7 +24,7 @@ extensions:
     server: https://example.com/mcp
 `;
 
-test('parseManifest reads the 1.0 manifest', () => {
+test('parseManifest reads the version 1 manifest', () => {
   const parsed = parseManifest(YAML);
   assert.equal(parsed.version, '1');
   assert.equal(parsed.identity.type, 'ed25519');

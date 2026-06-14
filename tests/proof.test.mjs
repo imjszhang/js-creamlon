@@ -73,6 +73,20 @@ test('verify rejects unsupported protocol version', async () => {
   assert.match(result.reason, /unsupported protocol version/);
 });
 
+test('verify rejects unknown proof fields and malformed identifiers', async () => {
+  const { publicKey, privateKey } = await generateKeyPair(null);
+  const fields = buildProofFields({
+    requestId: 'req-1',
+    capabilityId: 'echo',
+    inputDigest: hashText('in'),
+    outputDigest: hashText('out'),
+    completedAt: '2026-06-13T00:00:00.000Z',
+  });
+  const proof = signProof(fields, privateKey);
+  assert.match(verifyProof({ ...proof, extra: true }, publicKey).reason, /unknown proof fields/);
+  assert.match(verifyProof({ ...proof, request_id: 'bad id' }, publicKey).reason, /invalid request_id/);
+});
+
 test('verify rejects invalid hash format', async () => {
   const { publicKey, privateKey } = await generateKeyPair(null);
   const fields = buildProofFields({

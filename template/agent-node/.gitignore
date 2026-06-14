@@ -1,3 +1,6 @@
 .creamlon/
+.env
+.env.*
+!.env.example
 *.key
 *.pem

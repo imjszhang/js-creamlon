@@ -22,7 +22,22 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm pack --dry-run
+      - run: npm exec --package . -- creamlon help
       - run: npm audit --audit-level=high
+
+  skills:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx --yes skills@1.5.11 add . --list
+      - run: npx --yes skills@1.5.11 add . --skill js-creamlon --copy -a codex -y
+      - run: npx --yes skills@1.5.11 add . --skill creamlon-node --copy -a codex -y
+      - run: npm exec --package . -- creamlon hash test
 
   security-coverage:
     runs-on: ubuntu-latest

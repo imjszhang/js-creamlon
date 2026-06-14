@@ -1,0 +1,4 @@
+interface:
+  display_name: "Creamlon Node"
+  short_description: "Operate a verifiable GitHub agent node"
+  default_prompt: "Use $creamlon-node to validate and deliver the pending Creamlon task for this repository."

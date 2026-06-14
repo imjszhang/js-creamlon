@@ -62,6 +62,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const TEMPLATE_DIR = join(ROOT, 'template', 'agent-node');
+const PACKAGE_VERSION = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8')).version;
 const VALUE_OPTIONS = new Set([
   '--out', '--file', '--request-id', '--capability-id', '--input-digest', '--output-digest',
   '--input', '--input-url', '--media-type', '--requester', '--expires',
@@ -73,7 +74,7 @@ const VALUE_OPTIONS = new Set([
 ]);
 
 const HELP = {
-  main: `Creamlon - Creamlon protocol CLI v1.0.0
+  main: `Creamlon - Creamlon protocol CLI v${PACKAGE_VERSION}
 
 Usage:
   creamlon <command> [options]
@@ -98,7 +99,8 @@ Commands:
   init <dir> [--name <name>]        Scaffold agent node from template
   help [command]                    Show help
 
-submit/watch/deliver/reject/fetch-proof require GITHUB_TOKEN or --token.
+submit/deliver/reject require GITHUB_TOKEN, GH_TOKEN, or --token.
+Public discover/watch/fetch-proof reads can run anonymously with lower rate limits.
 Run "creamlon help <command>" for details.`,
   keygen: `creamlon keygen [--out <dir>]
 
@@ -155,7 +157,7 @@ Options:
   --limit <count>        Result limit (default: 20, max: 100)
   --refresh              Ignore the local 10-minute cache
   --cache-ttl <seconds>  Override cache lifetime
-  --token <pat>          GitHub token (or GITHUB_TOKEN)
+  --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --pretty`,
   submit: `creamlon submit <owner/repo> [options]
 
@@ -172,7 +174,7 @@ Options:
   --keys <path>                 Private HMAC key map
   --authorization-expires <iso>
   --ref <branch>         creamlon.yaml branch (default: main)
-  --token <pat>          GitHub token (or GITHUB_TOKEN)
+  --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --pretty               Pretty-print result JSON`,
   watch: `creamlon watch <owner/repo> [options]
 
@@ -181,7 +183,7 @@ Options:
   --keys <path>          HMAC key map
   --ref <branch>         creamlon.yaml branch (default: main)
   --once                 Poll once and exit (default)
-  --token <pat>          GitHub token (or GITHUB_TOKEN)
+  --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --pretty               Pretty-print JSON`,
   deliver: `creamlon deliver <owner/repo> <issue-number> [options]
 
@@ -191,7 +193,7 @@ Options:
   --keys <path>          HMAC key map
   --key <path>           Private key (default: <repo-path>/.creamlon/private.key)
   --ref <branch>         creamlon.yaml branch (default: main)
-  --token <pat>          GitHub token (or GITHUB_TOKEN)
+  --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --dry-run              Print proof only; no GitHub or file writes
   --resume               Resume a partially completed delivery
   --pretty               Pretty-print JSON`,
@@ -202,14 +204,14 @@ Options:
   --repo-path <dir>      Local node dir for proofs.log and HMAC keys
   --keys <path>          HMAC key map
   --ref <branch>         creamlon.yaml branch (default: main)
-  --token <pat>          GitHub token (or GITHUB_TOKEN)
+  --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --pretty               Pretty-print JSON`,
   fetchProof: `creamlon fetch-proof <owner/repo> <issue-number> [options]
 
 Options:
   --verify               Verify proof signature against the manifest identity
   --ref <branch>         creamlon.yaml branch (default: main)
-  --token <pat>          GitHub token (or GITHUB_TOKEN)
+  --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --pretty               Pretty-print JSON`,
   audit: `creamlon audit [--repo-path <dir>] [--pretty]
 

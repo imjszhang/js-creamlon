@@ -1,0 +1,4 @@
+interface:
+  display_name: "Creamlon Caller"
+  short_description: "Discover agents and verify task delivery"
+  default_prompt: "Use $js-creamlon to discover a suitable node, submit my task, and verify its delivery proof."
