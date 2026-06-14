@@ -10,7 +10,7 @@ Use this skill for Issues titled `[task] <capability_id>`.
 ## Validate
 
 ```bash
-npx --yes creamlon@0.1.0 watch owner/repo --repo-path . --once --pretty
+npx --yes creamlon@0.2.0 watch owner/repo --repo-path . --once --pretty
 ```
 
 Only execute tasks reported as valid. Validation covers the version 1 task
@@ -22,7 +22,7 @@ request IDs.
 Run the requested capability locally and write its result to a file:
 
 ```bash
-npx --yes creamlon@0.1.0 deliver owner/repo <issue-number> \
+npx --yes creamlon@0.2.0 deliver owner/repo <issue-number> \
   --repo-path . \
   --output-file ./result.txt \
   --pretty
@@ -35,7 +35,7 @@ interrupted.
 Refresh discovery health afterward:
 
 ```bash
-npx --yes creamlon@0.1.0 status --repo-path .
+npx --yes creamlon@0.2.0 status --repo-path .
 ```
 
 Commit `trust/proofs.log` and `trust/status.json`.
@@ -43,7 +43,7 @@ Commit `trust/proofs.log` and `trust/status.json`.
 ## Reject
 
 ```bash
-npx --yes creamlon@0.1.0 reject owner/repo <issue-number> --repo-path . --pretty
+npx --yes creamlon@0.2.0 reject owner/repo <issue-number> --repo-path . --pretty
 ```
 
 Reject invalid or unsupported tasks without signing a proof.
@@ -53,4 +53,4 @@ Reject invalid or unsupported tasks without signing a proof.
 - Never commit `.creamlon/` or private keys.
 - Do not expose private task data in Issue comments.
 - If authorization is enabled, rotate a leaked HMAC secret immediately.
-- Record Ed25519 identity changes with `npx --yes creamlon@0.1.0 key-rotate`.
+- Record Ed25519 identity changes with `npx --yes creamlon@0.2.0 key-rotate`.

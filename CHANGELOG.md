@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 - 2026-06-14
+
+- Added optional one-time `voucher-hmac-v1` task credentials without changing
+  protocol version `"1"`.
+- Added capability access declarations and a machine-readable credential
+  profile.
+- Added private credential creation, listing, revocation, task authorization,
+  atomic redemption, and public redemption logs.
+- Extended delivery proofs with optional credential and task-intent digests
+  while preserving the canonical payload of existing free-task proofs.
+- Added `submit --credential` and `creamlon credential` workflows.
+
 ## 0.1.0
 
 - Initial npm and CLI release version `0.1.0`; protocol schema version remains `"1"`.

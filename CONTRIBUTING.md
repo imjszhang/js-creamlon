@@ -8,7 +8,9 @@ npm test
 npm pack --dry-run
 ```
 
-Protocol changes must update the specification and include tests for tampering, replay, malformed input, and failure recovery where applicable.
+Protocol changes must update the specification and include tests for tampering,
+replay, malformed input, secret leakage, concurrent redemption, and failure
+recovery where applicable.
 
 ## Release
 

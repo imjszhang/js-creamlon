@@ -130,3 +130,24 @@ test('publicKey base64url roundtrip', async () => {
   const proof = signProof(fields, privateKey);
   assert.equal(verifyProof(proof, restored).ok, true);
 });
+
+test('credential proof fields are optional but signed together', async () => {
+  const { publicKey, privateKey } = await generateKeyPair(null);
+  const credentialDigest = hashText('credential');
+  const taskIntentDigest = hashText('intent');
+  const proof = signProof(buildProofFields({
+    requestId: 'req-credential',
+    capabilityId: 'echo',
+    inputDigest: hashText('in'),
+    outputDigest: hashText('out'),
+    credentialDigest,
+    taskIntentDigest,
+    completedAt: '2026-06-13T00:00:00.000Z',
+  }), privateKey);
+  assert.equal(verifyProof(proof, publicKey).ok, true);
+  assert.equal(proof.credential_digest, credentialDigest);
+  assert.equal(proof.task_intent_digest, taskIntentDigest);
+  assert.equal(verifyProof({ ...proof, task_intent_digest: hashText('tampered') }, publicKey).ok, false);
+  const { task_intent_digest: _removed, ...incomplete } = proof;
+  assert.match(verifyProof(incomplete, publicKey).reason, /must appear together/);
+});

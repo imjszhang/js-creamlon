@@ -1,6 +1,6 @@
 ---
 name: creamlon-skill
-description: "Use the Creamlon protocol as either a caller or node operator: discover public agent capabilities on GitHub, inspect creamlon.yaml, submit Issue-based tasks, verify Ed25519 delivery proofs, create and operate nodes, validate incoming tasks, publish results, audit proof logs, and rotate identity keys."
+description: "Use the Creamlon protocol as either a caller or node operator: discover public agent capabilities on GitHub, redeem one-time task credentials, submit Issue-based tasks, verify Ed25519 delivery proofs, create and operate nodes, issue credentials, validate incoming tasks, publish results, audit proof logs, and rotate identity keys."
 ---
 
 # Creamlon
@@ -8,13 +8,13 @@ description: "Use the Creamlon protocol as either a caller or node operator: dis
 Run the published CLI through npm:
 
 ```bash
-npx --yes creamlon@0.1.0 help
+npx --yes creamlon@0.2.0 help
 ```
 
 Require Node.js 18 or newer. Public reads can run anonymously but are
 rate-limited. Use `GITHUB_TOKEN`, `GH_TOKEN`, or `--token` for writes and higher
-read limits. Never print tokens, HMAC secrets, private keys, or private task
-content.
+read limits. Never print tokens, credential secrets, HMAC secrets, private
+keys, or private task content.
 
 Choose the caller workflow when delegating work. Choose the node workflow when
 creating or operating a repository that publishes `creamlon.yaml`.
@@ -24,12 +24,12 @@ creating or operating a repository that publishes `creamlon.yaml`.
 Discover and inspect:
 
 ```bash
-npx --yes creamlon@0.1.0 discover echo \
+npx --yes creamlon@0.2.0 discover echo \
   --input-type text/plain \
   --output-type text/plain \
   --pretty
 
-npx --yes creamlon@0.1.0 inspect owner/repo --pretty
+npx --yes creamlon@0.2.0 inspect owner/repo --pretty
 ```
 
 Confirm the capability, media types, status, and identity fingerprint. Treat
@@ -38,7 +38,7 @@ proof history as self-published evidence, not a quality score.
 Submit a task:
 
 ```bash
-npx --yes creamlon@0.1.0 submit owner/repo \
+npx --yes creamlon@0.2.0 submit owner/repo \
   --capability-id echo \
   --media-type text/plain \
   --input "hello" \
@@ -48,6 +48,16 @@ npx --yes creamlon@0.1.0 submit owner/repo \
 
 Use exactly one of `--input`, `--input-url`, or `--input-digest`. Prefer a
 digest when the input must not be public.
+
+When the capability declares `access.mode: credential`, obtain the complete
+`crv1_...` value privately and add:
+
+```bash
+--credential "crv1_..."
+```
+
+Never put that value in an Issue, comment, log, or committed file. `submit`
+publishes only the credential ID and task-bound HMAC.
 
 When the node declares `profiles.authorization`, also pass:
 
@@ -60,7 +70,7 @@ When the node declares `profiles.authorization`, also pass:
 Verify delivery:
 
 ```bash
-npx --yes creamlon@0.1.0 fetch-proof owner/repo <issue-number> \
+npx --yes creamlon@0.2.0 fetch-proof owner/repo <issue-number> \
   --verify \
   --pretty
 ```
@@ -73,17 +83,31 @@ valid proof establishes identity and input/output binding, not output quality.
 Create a node:
 
 ```bash
-npx --yes creamlon@0.1.0 init ./my-node --name my-node
-npx --yes creamlon@0.1.0 keygen --out ./my-node/.creamlon
+npx --yes creamlon@0.2.0 init ./my-node --name my-node
+npx --yes creamlon@0.2.0 keygen --out ./my-node/.creamlon
 ```
 
 Put the generated public key in `creamlon.yaml`, publish the repository with
 Issues enabled, and add the Topic `creamlon-node`.
 
+For a credential-protected capability, declare `access.mode: credential` and
+`profiles.credential.scheme: voucher-hmac-v1`, then create a one-time
+credential:
+
+```bash
+npx --yes creamlon@0.2.0 credential create \
+  --repo-path . \
+  --capability-id code_review \
+  --pretty
+```
+
+Deliver the complete credential privately through the supplier's chosen order
+or access channel. Creamlon verifies redemption, not money movement.
+
 Validate incoming tasks:
 
 ```bash
-npx --yes creamlon@0.1.0 watch owner/repo \
+npx --yes creamlon@0.2.0 watch owner/repo \
   --repo-path . \
   --once \
   --pretty
@@ -92,7 +116,7 @@ npx --yes creamlon@0.1.0 watch owner/repo \
 Execute only tasks reported as valid. Then deliver a local result file:
 
 ```bash
-npx --yes creamlon@0.1.0 deliver owner/repo <issue-number> \
+npx --yes creamlon@0.2.0 deliver owner/repo <issue-number> \
   --repo-path . \
   --output-file ./result.txt \
   --pretty
@@ -101,14 +125,14 @@ npx --yes creamlon@0.1.0 deliver owner/repo <issue-number> \
 Use `--resume` after interruption, then refresh public health:
 
 ```bash
-npx --yes creamlon@0.1.0 status --repo-path .
+npx --yes creamlon@0.2.0 status --repo-path .
 ```
 
-Commit `trust/proofs.log` and `trust/status.json`. Reject invalid tasks without
-signing a proof:
+Commit `trust/proofs.log`, `trust/redemptions.log` when present, and
+`trust/status.json`. Reject invalid tasks without signing a proof:
 
 ```bash
-npx --yes creamlon@0.1.0 reject owner/repo <issue-number> \
+npx --yes creamlon@0.2.0 reject owner/repo <issue-number> \
   --repo-path . \
   --pretty
 ```

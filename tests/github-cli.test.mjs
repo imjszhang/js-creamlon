@@ -14,8 +14,14 @@ import { setManifestFetch } from '../lib/manifest.mjs';
 import { hashText } from '../lib/hash.mjs';
 import { buildProofFields, signProof, generateKeyPair } from '../lib/proof.mjs';
 import { signHmacAuthorization } from '../lib/authorizationHmac.mjs';
-import { serializeTask } from '../lib/task.mjs';
+import { parseTask, serializeTask } from '../lib/task.mjs';
 import { signKeyRotation } from '../lib/identity.mjs';
+import {
+  authorizeCredential,
+  generateCredential,
+  loadRedemptions,
+  writeCredentialStore,
+} from '../lib/credential.mjs';
 
 const MANIFEST_YAML = `version: "1"
 name: mock-node
@@ -42,6 +48,15 @@ const FREE_MANIFEST_YAML = MANIFEST_YAML.replace(
   '  authorization:\n    scheme: hmac-sha256\n',
   '',
 );
+const CREDENTIAL_MANIFEST_YAML = FREE_MANIFEST_YAML
+  .replace(
+    '    output:\n      media_types: [text/plain]',
+    '    output:\n      media_types: [text/plain]\n    access:\n      mode: credential\n      units: 1',
+  )
+  .replace(
+    '  github:\n    transport: issues',
+    '  github:\n    transport: issues\n  credential:\n    scheme: voucher-hmac-v1',
+  );
 
 const AUTHORIZATION_KEY_ID = 'customer-1';
 const AUTHORIZATION_SECRET = 'node-secret';
@@ -209,6 +224,156 @@ test('submit supports a free node without authorization options', async () => {
 
   assert.equal(calls.length, 1);
   assert.doesNotMatch(calls[0].body, /authorization:/);
+});
+
+test('credential CLI creates, lists, and revokes without reprinting secrets', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-credential-cli-'));
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (message) => logs.push(message);
+  try {
+    await runCli([
+      'credential', 'create',
+      '--repo-path', dir,
+      '--capability-id', 'echo',
+      '--pretty',
+    ]);
+    const created = JSON.parse(logs.pop());
+    assert.match(created.credential, /^crv1_/);
+    const secret = created.credential.split('.')[1];
+
+    await runCli(['credential', 'list', '--repo-path', dir, '--pretty']);
+    const listedText = logs.pop();
+    const listed = JSON.parse(listedText);
+    assert.equal(listed.credentials[0].status, 'available');
+    assert.doesNotMatch(listedText, new RegExp(secret));
+
+    await runCli([
+      'credential', 'revoke', created.credential_id,
+      '--repo-path', dir,
+      '--pretty',
+    ]);
+    const revoked = JSON.parse(logs.pop());
+    assert.equal(revoked.status, 'revoked');
+  } finally {
+    console.log = originalLog;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('paid submit hides secret and deliver atomically redeems credential into proof', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-paid-delivery-'));
+  const calls = [];
+  let issueBody = null;
+  let issueState = 'open';
+  try {
+    const keygen = await generateKeyPair(join(dir, '.creamlon'));
+    const manifestText = CREDENTIAL_MANIFEST_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url);
+    const manifest = (await import('../lib/manifest.mjs')).parseManifest(manifestText);
+    const generated = generateCredential();
+    await writeCredentialStore(join(dir, '.creamlon', 'credentials.json'), {
+      version: '1',
+      credentials: [{
+        credential_id: generated.credential_id,
+        secret: generated.secret,
+        capability_id: 'echo',
+        status: 'available',
+        created_at: '2026-06-14T00:00:00Z',
+        expires: null,
+      }],
+    });
+    const outputFile = join(dir, 'out.txt');
+    await writeFile(outputFile, 'paid result', 'utf8');
+
+    installMockFetch((url, init) => {
+      if (url.includes('raw.githubusercontent.com')) {
+        return { status: 200, body: manifestText };
+      }
+      if (url.endsWith('/issues') && init?.method === 'POST') {
+        const body = JSON.parse(init.body);
+        issueBody = body.body;
+        return {
+          status: 201,
+          body: { number: 91, html_url: 'https://github.com/o/r/issues/91', title: body.title },
+        };
+      }
+      if (url.endsWith('/issues/91')) {
+        if (init?.method === 'PATCH') {
+          issueState = 'closed';
+          calls.push('close');
+          return { status: 200, body: { number: 91, state: 'closed' } };
+        }
+        return {
+          status: 200,
+          body: { number: 91, body: issueBody, title: '[task] echo', state: issueState },
+        };
+      }
+      if (url.includes('/issues/91/comments?')) return { status: 200, body: [] };
+      if (url.endsWith('/issues/91/comments') && init?.method === 'POST') {
+        calls.push(JSON.parse(init.body).body);
+        return { status: 201, body: { id: 1 } };
+      }
+      return { status: 404, body: { message: 'not found' } };
+    });
+
+    try {
+      await runCli([
+        'submit', 'owner/repo',
+        '--capability-id', 'echo',
+        '--media-type', 'text/plain',
+        '--input', 'paid input',
+        '--requester', 'github:alice/caller',
+        '--request-id', 'req-paid-cli',
+        '--expires', '2099-01-01T00:00:00Z',
+        '--credential', generated.value,
+        '--token', 'test-token',
+      ]);
+      assert.ok(issueBody);
+      assert.doesNotMatch(issueBody, new RegExp(generated.secret));
+      assert.equal(parseTask(issueBody).credential.credential_id, generated.credential_id);
+
+      const deliverArgs = [
+        'deliver', 'owner/repo', '91',
+        '--repo-path', dir,
+        '--output-file', outputFile,
+        '--token', 'test-token',
+      ];
+      await runCli(deliverArgs);
+      await runCli([...deliverArgs, '--resume']);
+    } finally {
+      resetFetch();
+    }
+
+    const redemptions = await loadRedemptions(join(dir, 'trust', 'redemptions.log'));
+    assert.equal(redemptions.length, 1);
+    assert.equal(redemptions[0].credential_id, generated.credential_id);
+    const proof = JSON.parse((await readFile(join(dir, 'trust', 'proofs.log'), 'utf8')).trim());
+    assert.match(proof.credential_digest, /^sha256:/);
+    assert.match(proof.task_intent_digest, /^sha256:/);
+    assert.ok(calls.some((item) => typeof item === 'string' && item.includes('credential_digest')));
+
+    const replay = {
+      version: '1',
+      request_id: 'req-paid-replay',
+      capability_id: 'echo',
+      requester: 'github:alice/caller',
+      input: { media_type: 'text/plain', value: 'another input' },
+      expires: '2099-01-01T00:00:00Z',
+    };
+    replay.credential = authorizeCredential(replay, manifest, generated.value);
+    const { validateTaskAcceptance } = await import('../lib/acceptance.mjs');
+    const { loadCredentialStore } = await import('../lib/credential.mjs');
+    const rejected = validateTaskAcceptance(replay, { title: '[task] echo', state: 'open' }, {
+      manifest,
+      credentialStore: await loadCredentialStore(join(dir, '.creamlon', 'credentials.json')),
+      redemptions,
+      checkIssueMeta: true,
+    });
+    assert.ok(rejected.errors.includes('credential already redeemed'));
+  } finally {
+    resetFetch();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('deliver dry-run signs proof from mocked issue', async () => {

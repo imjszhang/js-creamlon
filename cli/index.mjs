@@ -58,6 +58,17 @@ import {
   publicKeyAt,
   signKeyRotation,
 } from '../lib/identity.mjs';
+import {
+  appendRedemption,
+  authorizeCredential,
+  findCredential,
+  generateCredential,
+  loadCredentialStore,
+  loadRedemptions,
+  publicCredentialRecord,
+  validateRedemption,
+  writeCredentialStore,
+} from '../lib/credential.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -71,6 +82,7 @@ const VALUE_OPTIONS = new Set([
   '--completed-at', '--repo', '--public-key', '--proof', '--name', '--ref', '--token',
   '--input-type', '--output-type', '--status', '--limit', '--sort', '--cache-ttl',
   '--old-public-key', '--new-public-key', '--rotated-at', '--status-out',
+  '--credential', '--credentials', '--credential-digest', '--task-intent-digest',
 ]);
 
 const HELP = {
@@ -83,6 +95,9 @@ Commands:
   keygen [--out <dir>]              Generate Ed25519 key pair
   key-rotate [options]              Record a signed public-key rotation
   hmac-key-new [options]            Generate HMAC authorization key
+  credential create [options]       Create a one-time task credential
+  credential list [options]         List credential status without secrets
+  credential revoke <id> [options]  Revoke an unused credential
   hash <text>                       Hash text as sha256:...
   hash --file <path>                Hash file contents
   sign [options]                    Sign and output proof JSON
@@ -118,6 +133,19 @@ Appends a signed record to trust/key-rotations.log.`,
   hmacKeyNew: `creamlon hmac-key-new --key-id <id> [--out <path>]
 
 Generate an HMAC authorization key map (default: .creamlon/authorization.keys.json).`,
+  credential: `creamlon credential <create|list|revoke> [options]
+
+Commands:
+  create --capability-id <id> [--expires <iso>]
+  list
+  revoke <credential-id>
+
+Options:
+  --repo-path <dir>      Node repository (default: .)
+  --credentials <path>   Private store (default: <repo>/.creamlon/credentials.json)
+  --pretty               Pretty-print JSON
+
+The complete credential is displayed only by create. Keep it secret.`,
   hash: `creamlon hash <text>
 creamlon hash --file <path>
 
@@ -130,6 +158,8 @@ Options:
   --capability-id <id>
   --input-digest <sha256:...>
   --output-digest <sha256:...>
+  --credential-digest <sha256:...>   Optional; requires --task-intent-digest
+  --task-intent-digest <sha256:...>  Optional; requires --credential-digest
   --key <path>          Private key file (default: .creamlon/private.key)
   --completed-at <iso>  Optional ISO timestamp
   --pretty              Pretty-print JSON`,
@@ -173,6 +203,7 @@ Options:
   --authorization-key-id <id>  Required only when the node declares authorization
   --keys <path>                 Private HMAC key map
   --authorization-expires <iso>
+  --credential <crv1_...>  One-time task credential
   --ref <branch>         creamlon.yaml branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --pretty               Pretty-print result JSON`,
@@ -181,6 +212,7 @@ Options:
 Options:
   --repo-path <dir>      Local node dir for proofs.log and HMAC keys
   --keys <path>          HMAC key map
+  --credentials <path>   Private credential store
   --ref <branch>         creamlon.yaml branch (default: main)
   --once                 Poll once and exit (default)
   --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
@@ -191,6 +223,7 @@ Options:
   --output-file <path>   Hash deliverable file for output_digest (required)
   --repo-path <dir>      Local node dir (default: .)
   --keys <path>          HMAC key map
+  --credentials <path>   Private credential store
   --key <path>           Private key (default: <repo-path>/.creamlon/private.key)
   --ref <branch>         creamlon.yaml branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
@@ -203,6 +236,7 @@ Options:
   --reason <text>        Rejection reason (default: validation errors joined)
   --repo-path <dir>      Local node dir for proofs.log and HMAC keys
   --keys <path>          HMAC key map
+  --credentials <path>   Private credential store
   --ref <branch>         creamlon.yaml branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --pretty               Pretty-print JSON`,
@@ -275,6 +309,10 @@ function parseArgs(argv) {
     else if (arg === '--new-public-key') { i += 1; opts.newPublicKey = argv[i]; }
     else if (arg === '--rotated-at') { i += 1; opts.rotatedAt = argv[i]; }
     else if (arg === '--status-out') { i += 1; opts.statusOut = argv[i]; }
+    else if (arg === '--credential') { i += 1; opts.credential = argv[i]; }
+    else if (arg === '--credentials') { i += 1; opts.credentials = argv[i]; }
+    else if (arg === '--credential-digest') { i += 1; opts.credentialDigest = argv[i]; }
+    else if (arg === '--task-intent-digest') { i += 1; opts.taskIntentDigest = argv[i]; }
     else if (arg.startsWith('--')) throw usageError(`unknown option: ${arg}`);
     else positional.push(arg);
   }
@@ -317,6 +355,24 @@ async function loadAuthorizationSecrets(opts) {
   return { hmacKeys };
 }
 
+function credentialPaths(opts) {
+  const repoPath = resolve(opts.repoPath || '.');
+  return {
+    repoPath,
+    storePath: resolve(opts.credentials || join(repoPath, '.creamlon', 'credentials.json')),
+    redemptionsPath: join(repoPath, 'trust', 'redemptions.log'),
+  };
+}
+
+async function loadCredentialContext(opts) {
+  const paths = credentialPaths(opts);
+  const [credentialStore, redemptions] = await Promise.all([
+    loadCredentialStore(paths.storePath),
+    loadRedemptions(paths.redemptionsPath),
+  ]);
+  return { ...paths, credentialStore, redemptions };
+}
+
 async function cmdKeygen(opts) {
   const outDir = opts.out || '.creamlon';
   const result = await generateKeyPair(outDir);
@@ -344,12 +400,21 @@ async function cmdSign(opts) {
   }
   assertValidHashDigest(opts.inputDigest, 'input_digest');
   assertValidHashDigest(opts.outputDigest, 'output_digest');
+  if (!!opts.credentialDigest !== !!opts.taskIntentDigest) {
+    throw usageError('sign credential digest options must be provided together');
+  }
+  if (opts.credentialDigest) {
+    assertValidHashDigest(opts.credentialDigest, 'credential_digest');
+    assertValidHashDigest(opts.taskIntentDigest, 'task_intent_digest');
+  }
   const privateKey = await readPrivateKeyFile(keyPath);
   const fields = buildProofFields({
     requestId: opts.requestId,
     capabilityId: opts.capabilityId,
     inputDigest: opts.inputDigest,
     outputDigest: opts.outputDigest,
+    credentialDigest: opts.credentialDigest,
+    taskIntentDigest: opts.taskIntentDigest,
     completedAt: opts.completedAt,
   });
   const proof = signProof(fields, privateKey);
@@ -499,6 +564,7 @@ async function cmdSubmit(positional, opts) {
     requester: opts.requester,
     expires: opts.expires || null,
     authorization: null,
+    credential: null,
     input: {
       media_type: opts.mediaType || null,
       value: null,
@@ -531,9 +597,22 @@ async function cmdSubmit(positional, opts) {
     });
   }
 
+  const capability = parsed.capabilities.find((item) => item.id === task.capability_id);
+  const credentialRequired = capability?.access?.mode === 'credential';
+  if (credentialRequired && !opts.credential) {
+    throw usageError('submit requires --credential for this capability');
+  }
+  if (opts.credential) {
+    if (!task.expires) {
+      task.expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    }
+    task.credential = authorizeCredential(task, parsed, opts.credential);
+  }
+
   const errors = validateTask(task, {
     capability_ids: capIds,
     authorization_required: authorizationRequired,
+    credential_required: credentialRequired,
   });
   if (errors.length) fail(`invalid task: ${errors.join('; ')}`);
 
@@ -558,6 +637,7 @@ async function cmdWatch(positional, opts) {
   const token = resolveToken(opts);
   const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
   const authorizationSecrets = await loadAuthorizationSecrets(opts);
+  const { credentialStore, redemptions } = await loadCredentialContext(opts);
 
   let processed = new Set();
   if (opts.repoPath) {
@@ -576,6 +656,8 @@ async function cmdWatch(positional, opts) {
         manifest: parsed,
         processedIds: processed,
         authorizationSecrets,
+        credentialStore,
+        redemptions,
         checkIssueMeta: true,
       });
 
@@ -590,6 +672,8 @@ async function cmdWatch(positional, opts) {
         errors: acceptance.errors,
         authorization_ok: acceptance.authorization_ok,
         authorization_error: acceptance.authorization_error,
+        credential_ok: acceptance.credential_ok,
+        credential_error: acceptance.credential_error,
       });
     } catch (error) {
       results.push({
@@ -603,6 +687,8 @@ async function cmdWatch(positional, opts) {
         errors: [error.message],
         authorization_ok: false,
         authorization_error: null,
+        credential_ok: false,
+        credential_error: null,
       });
     }
   }
@@ -628,6 +714,7 @@ async function cmdDeliver(positional, opts) {
   const repoPath = resolve(opts.repoPath || '.');
   const keyPath = opts.key || join(repoPath, '.creamlon', 'private.key');
   const proofsPath = join(repoPath, 'trust', 'proofs.log');
+  const redemptionsPath = join(repoPath, 'trust', 'redemptions.log');
   const statePath = join(repoPath, '.creamlon', 'deliveries', `${issueNumber}.json`);
   const lockPath = join(repoPath, '.creamlon', 'deliver.lock');
   const releaseLock = opts.dryRun ? null : await acquireDeliveryLock(lockPath);
@@ -635,6 +722,7 @@ async function cmdDeliver(positional, opts) {
   try {
     const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
     const authorizationSecrets = await loadAuthorizationSecrets(opts);
+    const { credentialStore, redemptions } = await loadCredentialContext({ ...opts, repoPath });
     const issue = await getIssue(owner, repo, issueNumber, token);
     const task = parseTask(issue.body || '');
     const existingState = await readDeliveryState(statePath);
@@ -645,6 +733,8 @@ async function cmdDeliver(positional, opts) {
       manifest: parsed,
       processedIds: existingState ? null : processed,
       authorizationSecrets,
+      credentialStore,
+      redemptions,
       checkIssueMeta: !existingState,
     });
     if (acceptance.errors.length) fail(`cannot deliver: ${acceptance.errors.join('; ')}`);
@@ -653,7 +743,7 @@ async function cmdDeliver(positional, opts) {
     const outputDigest = await hashFile(opts.outputFile);
     let proof = existingState?.proof || null;
     if (proof) {
-      const binding = verifyProofBinding(proof, task, inputDigest);
+      const binding = verifyProofBinding(proof, task, inputDigest, { manifest: parsed });
       if (!binding.ok || proof.output_digest !== outputDigest) {
         fail('stored delivery state conflicts with task or output', 4);
       }
@@ -664,6 +754,8 @@ async function cmdDeliver(positional, opts) {
         capabilityId: task.capability_id,
         inputDigest,
         outputDigest,
+        credentialDigest: acceptance.credential_digest,
+        taskIntentDigest: acceptance.task_intent_digest,
         completedAt: opts.completedAt,
       }), privateKey);
     }
@@ -671,6 +763,23 @@ async function cmdDeliver(positional, opts) {
     if (opts.dryRun) {
       printJson({ ok: true, dry_run: true, proof }, opts.pretty);
       return;
+    }
+
+    if (!existingState && task.credential) {
+      const existingRedemption = redemptions.find(
+        (item) => item.credential_id === task.credential.credential_id,
+      );
+      if (!existingRedemption) {
+        await appendRedemption(redemptionsPath, {
+          version: '1',
+          request_id: task.request_id,
+          credential_id: task.credential.credential_id,
+          credential_digest: acceptance.credential_digest,
+          task_intent_digest: acceptance.task_intent_digest,
+          capability_id: task.capability_id,
+          redeemed_at: new Date().toISOString(),
+        });
+      }
     }
 
     const state = existingState || {
@@ -684,7 +793,7 @@ async function cmdDeliver(positional, opts) {
 
     if (state.status === 'prepared') {
       const comments = await getIssueComments(owner, repo, issueNumber, token);
-      const remote = extractBoundProofFromComments(comments, task, inputDigest);
+      const remote = extractBoundProofFromComments(comments, task, inputDigest, { manifest: parsed });
       if (remote.proof && !sameProof(remote.proof, proof)) {
         fail('issue already contains a conflicting valid proof', 4);
       }
@@ -731,9 +840,10 @@ async function cmdDeliver(positional, opts) {
       request_id: task.request_id,
       issue_number: Number(issueNumber),
       proofs_log: proofsPath,
+      ...(task.credential ? { redemptions_log: redemptionsPath } : {}),
       proof,
       next_steps: [
-        `git -C ${repoPath} add trust/proofs.log`,
+        `git -C ${repoPath} add trust/proofs.log${task.credential ? ' trust/redemptions.log' : ''}`,
         `git -C ${repoPath} commit -m "creamlon: deliver ${task.request_id}"`,
         `git -C ${repoPath} push`,
       ],
@@ -756,6 +866,7 @@ async function cmdReject(positional, opts) {
 
   const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
   const authorizationSecrets = await loadAuthorizationSecrets(opts);
+  const { credentialStore, redemptions } = await loadCredentialContext({ ...opts, repoPath });
 
   const issue = await getIssue(owner, repo, issueNumber, token);
   const task = parseTask(issue.body || '');
@@ -765,6 +876,8 @@ async function cmdReject(positional, opts) {
     manifest: parsed,
     processedIds: processed,
     authorizationSecrets,
+    credentialStore,
+    redemptions,
     checkIssueMeta: true,
   });
 
@@ -799,20 +912,24 @@ async function cmdFetchProof(positional, opts) {
   const taskErrors = validateTask(task, {
     capability_ids: parsed.capabilities.map((capability) => capability.id),
     authorization_required: !!parsed.profiles?.authorization,
+    credential_required: parsed.capabilities
+      .find((item) => item.id === task.capability_id)?.access?.mode === 'credential',
   });
   if (taskErrors.length) fail(`invalid issue task: ${taskErrors.join('; ')}`);
   if (issue.title !== taskIssueTitle(task.capability_id)) {
     fail('issue title capability does not match task capability_id');
   }
   const inputDigest = resolveInputDigest(task);
-  const extracted = extractBoundProofFromComments(comments, task, inputDigest);
+  const extracted = extractBoundProofFromComments(comments, task, inputDigest, { manifest: parsed });
   const proof = extracted.proof;
 
   const out = {
     ok: !!proof,
     issue_number: Number(issueNumber),
     proof,
-    binding: proof ? verifyProofBinding(proof, task, inputDigest) : { ok: false, errors: extracted.errors },
+    binding: proof
+      ? verifyProofBinding(proof, task, inputDigest, { manifest: parsed })
+      : { ok: false, errors: extracted.errors },
     author_trusted: !!extracted.comment,
   };
 
@@ -865,6 +982,42 @@ async function auditRepository(repoPath) {
     if (error.code === 'ENOENT') return '';
     throw error;
   });
+  const redemptionsText = await readFile(join(repoPath, 'trust', 'redemptions.log'), 'utf8')
+    .catch((error) => {
+      if (error.code === 'ENOENT') return '';
+      throw error;
+    });
+  const redemptionEntries = [];
+  const redemptionByCredential = new Map();
+  const redemptionByRequest = new Map();
+  let redemptionLine = 0;
+  for (const line of redemptionsText.split('\n')) {
+    redemptionLine += 1;
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    try {
+      const redemption = JSON.parse(trimmed);
+      const errors = validateRedemption(redemption);
+      if (redemptionByCredential.has(redemption.credential_id)) {
+        errors.push('duplicate redemption credential_id');
+      }
+      if (redemptionByRequest.has(redemption.request_id)) {
+        errors.push('duplicate redemption request_id');
+      }
+      if (!errors.length) {
+        redemptionByCredential.set(redemption.credential_id, redemption);
+        redemptionByRequest.set(redemption.request_id, redemption);
+      }
+      redemptionEntries.push({
+        line: redemptionLine,
+        request_id: redemption.request_id,
+        credential_id: redemption.credential_id,
+        errors,
+      });
+    } catch (error) {
+      redemptionEntries.push({ line: redemptionLine, errors: [error.message] });
+    }
+  }
   const entries = [];
   const seen = new Map();
   let lineNumber = 0;
@@ -880,6 +1033,15 @@ async function auditRepository(repoPath) {
         : { ok: false, reason: 'no valid public key for proof timestamp' };
       const previous = seen.get(proof.request_id);
       const duplicate = previous ? (sameProof(previous, proof) ? 'same' : 'conflict') : null;
+      const redemption = redemptionByRequest.get(proof.request_id);
+      if (proof.credential_digest && (
+        !redemption
+        || redemption.credential_digest !== proof.credential_digest
+        || redemption.task_intent_digest !== proof.task_intent_digest
+      )) {
+        verify.ok = false;
+        verify.reason = 'proof credential fields do not match redemptions.log';
+      }
       if (!previous) seen.set(proof.request_id, proof);
       entries.push({ line: lineNumber, request_id: proof.request_id, verify, duplicate });
     } catch (error) {
@@ -888,7 +1050,8 @@ async function auditRepository(repoPath) {
   }
   const ok = manifestErrors.length === 0
     && continuity.status !== 'broken'
-    && entries.every((entry) => entry.verify.ok && entry.duplicate == null);
+    && entries.every((entry) => entry.verify.ok && entry.duplicate == null)
+    && redemptionEntries.every((entry) => entry.errors.length === 0);
   return {
     ok,
     manifest_errors: manifestErrors,
@@ -896,6 +1059,8 @@ async function auditRepository(repoPath) {
     key_errors: continuity.errors,
     proof_count: entries.length,
     entries,
+    redemption_count: redemptionEntries.length,
+    redemptions: redemptionEntries,
   };
 }
 
@@ -985,6 +1150,63 @@ async function cmdHmacKeyNew(opts) {
   console.log(`HMAC authorization key written to ${outPath}`);
 }
 
+async function cmdCredential(positional, opts) {
+  const action = positional[1];
+  const { storePath, redemptionsPath } = credentialPaths(opts);
+  const store = await loadCredentialStore(storePath);
+  const redemptions = await loadRedemptions(redemptionsPath);
+
+  if (action === 'create') {
+    if (!opts.capabilityId) throw usageError('credential create requires --capability-id');
+    if (opts.expires && Number.isNaN(Date.parse(opts.expires))) {
+      throw usageError('credential create --expires must be an ISO timestamp');
+    }
+    const generated = generateCredential();
+    const record = {
+      credential_id: generated.credential_id,
+      secret: generated.secret,
+      capability_id: opts.capabilityId,
+      status: 'available',
+      created_at: new Date().toISOString(),
+      expires: opts.expires || null,
+    };
+    store.credentials.push(record);
+    await writeCredentialStore(storePath, store);
+    printJson({
+      credential: generated.value,
+      ...publicCredentialRecord(record, redemptions),
+      store: storePath,
+      warning: 'Keep the complete credential secret. It will not be shown by credential list.',
+    }, opts.pretty);
+    return;
+  }
+
+  if (action === 'list') {
+    printJson({
+      store: storePath,
+      credentials: store.credentials.map((record) => publicCredentialRecord(record, redemptions)),
+    }, opts.pretty);
+    return;
+  }
+
+  if (action === 'revoke') {
+    const credentialId = positional[2];
+    if (!credentialId) throw usageError('credential revoke requires <credential-id>');
+    const record = findCredential(store, credentialId);
+    if (!record) fail(`unknown credential_id: ${credentialId}`, 4);
+    if (redemptions.some((item) => item.credential_id === credentialId)) {
+      fail('cannot revoke a redeemed credential', 4);
+    }
+    record.status = 'revoked';
+    record.revoked_at = new Date().toISOString();
+    await writeCredentialStore(storePath, store);
+    printJson(publicCredentialRecord(record, redemptions), opts.pretty);
+    return;
+  }
+
+  throw usageError('credential requires create, list, or revoke');
+}
+
 async function copyTemplate(src, dest, name) {
   await mkdir(dest, { recursive: true });
   const entries = await readdir(src, { withFileTypes: true });
@@ -1053,6 +1275,9 @@ export async function runCli(argv) {
       break;
     case 'hmac-key-new':
       await cmdHmacKeyNew(opts);
+      break;
+    case 'credential':
+      await cmdCredential(positional, opts);
       break;
     case 'hash':
       await cmdHash(positional, opts);

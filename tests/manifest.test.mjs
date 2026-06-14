@@ -56,3 +56,26 @@ test('manifest permits namespaced extensions but rejects unsupported profiles', 
   ));
   assert.ok(validateManifest(parsed).some((error) => error.includes('unsupported profiles')));
 });
+
+test('manifest supports credential access without changing protocol version', () => {
+  const parsed = parseManifest(YAML
+    .replace(
+      '    output:\n      media_types: [text/plain]',
+      '    output:\n      media_types: [text/plain]\n    access:\n      mode: credential\n      units: 1',
+    )
+    .replace(
+      '  github:\n    transport: issues',
+      '  github:\n    transport: issues\n  credential:\n    scheme: voucher-hmac-v1\n    instructions: Obtain a credential.',
+    ));
+  assert.equal(parsed.version, '1');
+  assert.equal(parsed.capabilities[0].access.mode, 'credential');
+  assert.deepEqual(validateManifest(parsed, { requireGithubProfile: true }), []);
+});
+
+test('credential access requires the credential profile', () => {
+  const parsed = parseManifest(YAML.replace(
+    '    output:\n      media_types: [text/plain]',
+    '    output:\n      media_types: [text/plain]\n    access:\n      mode: credential\n      units: 1',
+  ));
+  assert.ok(validateManifest(parsed).some((error) => error.includes('requires profiles.credential')));
+});

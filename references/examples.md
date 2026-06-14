@@ -12,6 +12,33 @@ creamlon keygen --out ./code-review-node/.creamlon
 Bob places the generated public key in `creamlon.yaml`, pushes the repository
 publicly, and adds the Topic `creamlon-node`.
 
+To require a one-time credential for `code_review`, Bob adds:
+
+```yaml
+capabilities:
+  - id: code_review
+    access:
+      mode: credential
+      units: 1
+profiles:
+  github:
+    transport: issues
+  credential:
+    scheme: voucher-hmac-v1
+    instructions: Obtain a task credential from Bob.
+```
+
+Bob creates a credential and gives the complete value to Alice after any
+external order or access check:
+
+```bash
+creamlon credential create \
+  --repo-path ./code-review-node \
+  --capability-id code_review \
+  --expires 2026-12-31T00:00:00Z \
+  --pretty
+```
+
 ## Discover and submit
 
 ```bash
@@ -27,8 +54,12 @@ creamlon submit bob/code-review-node \
   --media-type text/uri-list \
   --input-url "https://github.com/alice/project/pull/42" \
   --requester github:alice/caller \
+  --credential "crv1_..." \
   --pretty
 ```
+
+The created Issue contains the credential ID and task-bound HMAC, never the
+credential secret.
 
 ## Validate and deliver
 
@@ -45,6 +76,9 @@ creamlon deliver bob/code-review-node 42 \
 ```
 
 If interrupted, repeat `deliver` with `--resume`.
+
+After delivery, Bob commits both `trust/proofs.log` and, for credential-backed
+tasks, `trust/redemptions.log`.
 
 ## Verify
 
