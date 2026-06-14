@@ -11,3 +11,5 @@
 - GitHub pagination, timeout, retries, CI, audit, and secret scanning
 - GitHub Topic discovery with strict capability type and availability filters
 - Public proof summaries, health status, key fingerprints, and signed key continuity
+- Historical proof verification across key rotations without using self-published proof counts for ranking
+- Public-only discovery, anchored continuity semantics, and strict rotation-chain writes

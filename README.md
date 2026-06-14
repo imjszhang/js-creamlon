@@ -48,8 +48,10 @@ creamlon discover echo \
 ```
 
 Discovery uses GitHub Topic search and validates each repository's current
-`agent.yaml`. Results include public-key fingerprints, signed proof history,
-key continuity, and recent health status. There is no central registry.
+`agent.yaml`. Results include public-key fingerprints, self-published signature
+history, key continuity, and recent health status. Signature counts do not
+affect ranking, and continuity is trusted only against a previously saved key.
+There is no central registry.
 
 ## Quick start: call a node
 

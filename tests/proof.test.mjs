@@ -90,6 +90,19 @@ test('verify rejects invalid hash format', async () => {
   assert.match(result.reason, /invalid input_hash/);
 });
 
+test('verify rejects an invalid completion timestamp', async () => {
+  const { publicKey, privateKey } = await generateKeyPair(null);
+  const fields = buildProofFields({
+    requestId: 'req-time',
+    capabilityId: 'echo',
+    inputHash: hashText('in'),
+    outputHash: hashText('out'),
+    completedAt: 'not-a-date',
+  });
+  const proof = signProof(fields, privateKey);
+  assert.match(verifyProof(proof, publicKey).reason, /invalid completed_at/);
+});
+
 test('publicKey base64url roundtrip', async () => {
   const { publicKey, privateKey } = await generateKeyPair(null);
   const b64 = publicKeyToBase64Url(publicKey);

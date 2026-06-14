@@ -45,7 +45,13 @@ Optional public trust files:
 ```
 
 Status older than 24 hours is stale. Proof counts show verifiable delivery
-history, not output quality.
+signatures published by the node, not independently confirmed GitHub tasks or
+output quality. They are never used for discovery ranking.
+
+A rotation chain without a caller's previously saved public key is only
+`self_consistent`. It becomes `verified` only when its first key matches that
+external trust anchor. Historical proofs are checked with the key active at
+their `completed_at` timestamp.
 
 ## Task
 
@@ -110,6 +116,9 @@ A fetched proof is valid only when:
 1. Its signature is valid.
 2. Its request ID, capability, and input hash match the Issue.
 3. Its comment was posted by a repository owner, member, collaborator, or GitHub App.
+
+After a key rotation, proof verification selects the public key that was active
+at the proof's `completed_at` timestamp.
 
 ## Delivery
 

@@ -1,7 +1,7 @@
 ﻿import { readFile, writeFile, mkdir, readdir, stat, appendFile } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { createPublicKey, randomUUID, randomBytes } from 'node:crypto';
 import { hashText, hashFile, assertValidHashDigest } from '../lib/hash.mjs';
 import { fetchAgentYaml, parseAgentYaml, parseRepoSlug, validateAgentYaml } from '../lib/agentYaml.mjs';
 import {
@@ -10,6 +10,7 @@ import {
   parseProofJson,
   publicKeyFingerprint,
   publicKeyFromBase64Url,
+  publicKeyToBase64Url,
   readPrivateKeyFile,
   signProof,
   verifyProof,
@@ -52,7 +53,11 @@ import {
 } from '../lib/github.mjs';
 import { discoverRepositories } from '../lib/discovery.mjs';
 import { readDiscoveryCache, writeDiscoveryCache } from '../lib/discoveryCache.mjs';
-import { signKeyRotation } from '../lib/identity.mjs';
+import {
+  inspectKeyContinuity,
+  publicKeyAt,
+  signKeyRotation,
+} from '../lib/identity.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -131,6 +136,7 @@ Options:
 Options:
   --repo <owner/repo>   Fetch public_key from agent.yaml
   --ref <branch>        Git branch (default: main)
+  --token <pat>         Load key rotations for historical proofs
   --public-key <b64>    Or supply public key directly
   --proof <path>        Proof JSON file (or stdin if omitted)
   --pretty              Pretty-print JSON result`,
@@ -145,7 +151,7 @@ Options:
   --input-type <type>    Filter capability input type
   --output-type <type>   Filter capability output type
   --status <status>      available, busy, or offline
-  --sort <mode>          default, recent, proofs, or updated
+  --sort <mode>          default or updated
   --limit <count>        Result limit (default: 20, max: 100)
   --refresh              Ignore the local 10-minute cache
   --cache-ttl <seconds>  Override cache lifetime
@@ -354,18 +360,40 @@ async function cmdVerify(opts) {
   const proof = parseProofJson(proofText);
 
   let publicKeyB64 = opts.publicKey;
+  let continuity = null;
   if (opts.repo) {
     const { owner, repo } = parseRepoSlug(opts.repo);
     const { parsed } = await fetchAgentYaml(owner, repo, opts.ref || 'main');
     publicKeyB64 = parsed.creamlon?.public_key;
     if (!publicKeyB64) fail('agent.yaml has no creamlon.public_key');
+    const token = resolveToken(opts);
+    if (token) {
+      const rotationsText = await getRepositoryFile(
+        owner,
+        repo,
+        'trust/key-rotations.log',
+        opts.ref || 'main',
+        token,
+        { optional: true },
+      );
+      continuity = inspectKeyContinuity(rotationsText, publicKeyB64);
+      if (continuity.status === 'broken') {
+        fail(`invalid key rotation chain: ${continuity.errors.join('; ')}`);
+      }
+      publicKeyB64 = publicKeyAt(continuity.history, proof.completed_at);
+      if (!publicKeyB64) fail('no public key valid at proof completion time');
+    }
   }
   if (!publicKeyB64) throw usageError('verify requires --repo or --public-key');
 
   const publicKey = publicKeyFromBase64Url(publicKeyB64);
   const result = verifyProof(proof, publicKey);
   if (opts.pretty || !result.ok) {
-    printJson({ ...result, request_id: proof.request_id }, opts.pretty);
+    printJson({
+      ...result,
+      request_id: proof.request_id,
+      ...(continuity ? { key_continuity: continuity.status } : {}),
+    }, opts.pretty);
   } else {
     console.log('ok: true');
   }
@@ -384,12 +412,11 @@ async function cmdInspect(positional, opts) {
     name: parsed.name,
     description: parsed.description,
     creamlon: parsed.creamlon,
-    public_key_fingerprint: parsed.creamlon?.public_key
-      ? publicKeyFingerprint(parsed.creamlon.public_key)
-      : null,
+    public_key_fingerprint: null,
     valid: errors.length === 0,
     errors,
   };
+  if (out.valid) out.public_key_fingerprint = publicKeyFingerprint(parsed.creamlon.public_key);
   printJson(out, opts.pretty);
 }
 
@@ -401,8 +428,8 @@ async function cmdDiscover(positional, opts) {
     throw usageError('discover --limit must be an integer from 1 to 100');
   }
   const sort = opts.sort || 'default';
-  if (!['default', 'recent', 'proofs', 'updated'].includes(sort)) {
-    throw usageError('discover --sort must be default, recent, proofs, or updated');
+  if (!['default', 'updated'].includes(sort)) {
+    throw usageError('discover --sort must be default or updated');
   }
   if (opts.status && !['available', 'busy', 'offline'].includes(opts.status)) {
     throw usageError('discover --status must be available, busy, or offline');
@@ -415,6 +442,7 @@ async function cmdDiscover(positional, opts) {
   const token = resolveToken(opts);
   const cachePath = resolve('.creamlon', 'cache', 'discovery.json');
   const cacheKey = JSON.stringify({
+    schema: 2,
     capabilityId,
     inputType: opts.inputType || null,
     outputType: opts.outputType || null,
@@ -776,12 +804,27 @@ async function cmdFetchProof(positional, opts) {
   }
 
   if (opts.verify) {
-    const publicKeyB64 = parsed.creamlon?.public_key;
-    if (!publicKeyB64) fail('agent.yaml has no creamlon.public_key');
+    const currentPublicKey = parsed.creamlon?.public_key;
+    if (!currentPublicKey) fail('agent.yaml has no creamlon.public_key');
+    const rotationsText = await getRepositoryFile(
+      owner,
+      repo,
+      'trust/key-rotations.log',
+      opts.ref || 'main',
+      token,
+      { optional: true },
+    );
+    const continuity = inspectKeyContinuity(rotationsText, currentPublicKey);
+    if (continuity.status === 'broken') {
+      fail(`invalid key rotation chain: ${continuity.errors.join('; ')}`);
+    }
+    const publicKeyB64 = publicKeyAt(continuity.history, proof.completed_at);
+    if (!publicKeyB64) fail('no public key valid at proof completion time');
     const publicKey = publicKeyFromBase64Url(publicKeyB64);
     out.verify = verifyProof(proof, publicKey);
     out.signature_ok = out.verify.ok;
     out.binding_ok = out.binding.ok;
+    out.key_continuity = continuity.status;
   }
 
   printJson(out, opts.pretty);
@@ -793,9 +836,13 @@ async function cmdFetchProof(positional, opts) {
 async function auditRepository(repoPath) {
   const parsedAgent = parseAgentYaml(await readFile(join(repoPath, 'agent.yaml'), 'utf8'));
   const agentErrors = validateAgentYaml(parsedAgent);
-  const publicKey = parsedAgent.creamlon?.public_key
-    ? publicKeyFromBase64Url(parsedAgent.creamlon.public_key)
-    : null;
+  const rotationsText = await readFile(join(repoPath, 'trust', 'key-rotations.log'), 'utf8').catch((error) => {
+    if (error.code === 'ENOENT') return '';
+    throw error;
+  });
+  const continuity = agentErrors.length === 0
+    ? inspectKeyContinuity(rotationsText, parsedAgent.creamlon.public_key)
+    : { status: 'broken', errors: ['invalid agent.yaml'], history: [] };
   const logText = await readFile(join(repoPath, 'trust', 'proofs.log'), 'utf8').catch((error) => {
     if (error.code === 'ENOENT') return '';
     throw error;
@@ -809,7 +856,10 @@ async function auditRepository(repoPath) {
     if (!trimmed || trimmed.startsWith('#')) continue;
     try {
       const proof = parseProofJson(trimmed);
-      const verify = publicKey ? verifyProof(proof, publicKey) : { ok: false, reason: 'missing public key' };
+      const publicKeyBase64Url = publicKeyAt(continuity.history, proof.completed_at);
+      const verify = publicKeyBase64Url
+        ? verifyProof(proof, publicKeyFromBase64Url(publicKeyBase64Url))
+        : { ok: false, reason: 'no valid public key for proof timestamp' };
       const previous = seen.get(proof.request_id);
       const duplicate = previous ? (sameProof(previous, proof) ? 'same' : 'conflict') : null;
       if (!previous) seen.set(proof.request_id, proof);
@@ -819,8 +869,16 @@ async function auditRepository(repoPath) {
     }
   }
   const ok = agentErrors.length === 0
+    && continuity.status !== 'broken'
     && entries.every((entry) => entry.verify.ok && entry.duplicate == null);
-  return { ok, agent_errors: agentErrors, proof_count: entries.length, entries };
+  return {
+    ok,
+    agent_errors: agentErrors,
+    key_continuity: continuity.status,
+    key_errors: continuity.errors,
+    proof_count: entries.length,
+    entries,
+  };
 }
 
 async function cmdAudit(opts) {
@@ -852,16 +910,42 @@ async function cmdKeyRotate(opts) {
   if (opts.oldPublicKey === opts.newPublicKey) fail('old and new public keys must differ');
   const rotatedAt = opts.rotatedAt || new Date().toISOString();
   if (Number.isNaN(Date.parse(rotatedAt))) throw usageError('key-rotate --rotated-at must be an ISO timestamp');
+  if (Date.parse(rotatedAt) > Date.now() + 5 * 60 * 1000) {
+    throw usageError('key-rotate --rotated-at cannot be in the future');
+  }
   const repoPath = resolve(opts.repoPath || '.');
   const privateKey = await readPrivateKeyFile(opts.key || join(repoPath, '.creamlon', 'private.key'));
+  const signingPublicKey = publicKeyToBase64Url(createPublicKey(privateKey));
+  if (signingPublicKey !== opts.oldPublicKey) {
+    fail('private key does not match --old-public-key');
+  }
+  const parsedAgent = parseAgentYaml(await readFile(join(repoPath, 'agent.yaml'), 'utf8'));
+  const agentErrors = validateAgentYaml(parsedAgent);
+  if (agentErrors.length) fail(`invalid agent.yaml: ${agentErrors.join('; ')}`);
+  if (parsedAgent.creamlon.public_key !== opts.newPublicKey) {
+    fail('--new-public-key must match agent.yaml creamlon.public_key');
+  }
+  const logPath = join(repoPath, 'trust', 'key-rotations.log');
+  const existingText = await readFile(logPath, 'utf8').catch((error) => {
+    if (error.code === 'ENOENT') return '';
+    throw error;
+  });
+  const existing = inspectKeyContinuity(existingText, opts.oldPublicKey);
+  if (existing.status === 'broken') {
+    fail(`existing key rotation chain is broken: ${existing.errors.join('; ')}`);
+  }
   const rotation = signKeyRotation({
     oldPublicKey: opts.oldPublicKey,
     newPublicKey: opts.newPublicKey,
     rotatedAt,
   }, privateKey);
-  const logPath = join(repoPath, 'trust', 'key-rotations.log');
+  const candidateText = `${existingText.trimEnd()}${existingText.trim() ? '\n' : ''}${JSON.stringify(rotation)}\n`;
+  const candidate = inspectKeyContinuity(candidateText, opts.newPublicKey);
+  if (candidate.status === 'broken') {
+    fail(`new key rotation would break the chain: ${candidate.errors.join('; ')}`);
+  }
   await mkdir(dirname(logPath), { recursive: true });
-  await appendFile(logPath, `${JSON.stringify(rotation)}\n`, 'utf8');
+  await writeFile(logPath, candidateText, 'utf8');
   printJson({ ...rotation, path: logPath }, opts.pretty);
 }
 

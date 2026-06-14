@@ -14,6 +14,7 @@ import { hashText } from '../lib/hash.mjs';
 import { buildProofFields, signProof, generateKeyPair } from '../lib/proof.mjs';
 import { signHmacPayment } from '../lib/payment.mjs';
 import { serializeTaskYaml } from '../lib/taskYaml.mjs';
+import { signKeyRotation } from '../lib/identity.mjs';
 
 const AGENT_YAML = `name: mock-node
 description: Mock
@@ -419,7 +420,8 @@ test('reject comments and closes issue', async () => {
 });
 
 test('fetch-proof extracts and verifies proof from comments', async () => {
-  const { publicKeyBase64Url, privateKey } = await generateKeyPair(null);
+  const oldKeys = await generateKeyPair(null);
+  const currentKeys = await generateKeyPair(null);
   const fields = buildProofFields({
     requestId: 'req-fetch',
     capabilityId: 'echo',
@@ -427,12 +429,27 @@ test('fetch-proof extracts and verifies proof from comments', async () => {
     outputHash: hashText('out'),
     completedAt: '2026-06-13T00:00:00.000Z',
   });
-  const proof = signProof(fields, privateKey);
+  const proof = signProof(fields, oldKeys.privateKey);
+  const rotation = signKeyRotation({
+    oldPublicKey: oldKeys.publicKeyBase64Url,
+    newPublicKey: currentKeys.publicKeyBase64Url,
+    rotatedAt: '2026-06-14T00:00:00.000Z',
+  }, oldKeys.privateKey);
   const commentBody = `Creamlon delivery proof:\n\n\`\`\`json\n${JSON.stringify(proof, null, 2)}\n\`\`\``;
 
   installMockFetch((url) => {
     if (url.includes('raw.githubusercontent.com')) {
-      return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
+      return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', currentKeys.publicKeyBase64Url) };
+    }
+    if (url.includes('/contents/trust/key-rotations.log')) {
+      return {
+        status: 200,
+        body: {
+          type: 'file',
+          encoding: 'base64',
+          content: Buffer.from(`${JSON.stringify(rotation)}\n`).toString('base64'),
+        },
+      };
     }
     if (url.endsWith('/issues/88')) {
       return {
@@ -478,6 +495,7 @@ test('fetch-proof extracts and verifies proof from comments', async () => {
   assert.equal(out.ok, true);
   assert.equal(out.proof.request_id, 'req-fetch');
   assert.equal(out.verify.ok, true);
+  assert.equal(out.key_continuity, 'self_consistent');
 });
 
 test('payment-key-new creates a private HMAC key', async () => {
@@ -519,9 +537,31 @@ test('GitHub discovery API searches the required topic and reads repository file
     const text = await getRepositoryFile('owner', 'node', 'agent.yaml', 'main', 'test-token');
     assert.equal(repos[0].full_name, 'owner/node');
     assert.equal(text, 'name: node\n');
-    assert.ok(urls.some((url) => url.includes('q=topic%3Acreamlon-node')));
+    assert.ok(urls.some((url) => url.includes('q=topic%3Acreamlon-node+is%3Apublic')));
     assert.ok(urls.some((url) => url.includes('ref=main')));
   } finally {
     resetFetch();
   }
+});
+
+test('inspect reports an invalid public key without crashing', async () => {
+  installMockFetch((url) => {
+    if (url.includes('raw.githubusercontent.com')) {
+      return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', 'invalid-key') };
+    }
+    return { status: 404, body: { message: 'not found' } };
+  });
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (message) => logs.push(message);
+  try {
+    await runCli(['inspect', 'owner/node', '--pretty']);
+  } finally {
+    console.log = originalLog;
+    resetFetch();
+  }
+  const result = JSON.parse(logs.join('\n'));
+  assert.equal(result.valid, false);
+  assert.equal(result.public_key_fingerprint, null);
+  assert.ok(result.errors.includes('invalid creamlon.public_key'));
 });

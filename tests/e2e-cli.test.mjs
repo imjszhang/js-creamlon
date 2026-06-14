@@ -200,6 +200,14 @@ test('status publishes audit health and key-rotate records continuity', async ()
     const agentText = (await readFile(agentPath, 'utf8'))
       .replace('REPLACE_WITH_public.b64url', oldKeys.publicKeyBase64Url);
     await writeFile(agentPath, agentText, 'utf8');
+    const historicalProof = signProof(buildProofFields({
+      requestId: 'before-rotation',
+      capabilityId: 'echo',
+      inputHash: hashText('before'),
+      outputHash: hashText('before'),
+      completedAt: '2026-06-13T00:00:00.000Z',
+    }), oldKeys.privateKey);
+    await writeFile(join(dir, 'trust', 'proofs.log'), `${JSON.stringify(historicalProof)}\n`, 'utf8');
 
     await runCli(['status', '--repo-path', dir]);
     const status = JSON.parse(await readFile(join(dir, 'trust', 'status.json'), 'utf8'));
@@ -207,6 +215,11 @@ test('status publishes audit health and key-rotate records continuity', async ()
     assert.equal(status.status, 'available');
     assert.equal(status.proofs_valid, true);
 
+    await writeFile(
+      agentPath,
+      agentText.replace(oldKeys.publicKeyBase64Url, newKeys.publicKeyBase64Url),
+      'utf8',
+    );
     await runCli([
       'key-rotate',
       '--repo-path', dir,
@@ -215,7 +228,34 @@ test('status publishes audit health and key-rotate records continuity', async ()
       '--rotated-at', '2026-06-14T00:00:00.000Z',
     ]);
     const rotations = await readFile(join(dir, 'trust', 'key-rotations.log'), 'utf8');
-    assert.equal(verifyKeyContinuity(rotations, newKeys.publicKeyBase64Url).status, 'verified');
+    assert.equal(verifyKeyContinuity(rotations, newKeys.publicKeyBase64Url).status, 'self_consistent');
+    await runCli(['audit', '--repo-path', dir]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('key-rotate rejects a private key that does not match the old public key', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-bad-rotation-'));
+  try {
+    await runCli(['init', dir, '--name', 'rotation-agent']);
+    const oldKeys = await generateKeyPair(null);
+    const wrongKeys = await generateKeyPair(join(dir, '.creamlon'));
+    const newKeys = await generateKeyPair(null);
+    const agentPath = join(dir, 'agent.yaml');
+    const agentText = (await readFile(agentPath, 'utf8'))
+      .replace('REPLACE_WITH_public.b64url', newKeys.publicKeyBase64Url);
+    await writeFile(agentPath, agentText, 'utf8');
+    await assert.rejects(
+      () => runCli([
+        'key-rotate',
+        '--repo-path', dir,
+        '--old-public-key', oldKeys.publicKeyBase64Url,
+        '--new-public-key', newKeys.publicKeyBase64Url,
+      ]),
+      (error) => error.message.includes('private key does not match'),
+    );
+    assert.notEqual(wrongKeys.publicKeyBase64Url, oldKeys.publicKeyBase64Url);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
