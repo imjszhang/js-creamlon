@@ -98,30 +98,60 @@ requester: github:alice/my-agent
 
 Proof `input_hash` is `creamlon hash` of the URL string.
 
-## Paid node (payment hook)
+## Paid node (token payment, v0.3)
 
 Bob's `agent.yaml`:
 
 ```yaml
 creamlon:
   payment_required: true
-  payment_instructions: "Send 0.01 ETH to 0x...; embed request_id in tx data."
+  payment_instructions: "Contact Bob for a payment token."
+  payment:
+    type: token
 ```
 
-Alice submits with payment proof:
+Bob generates a node secret:
+
+```bash
+creamlon token-new --out ./code-review-agent/.creamlon/payment.token
+```
+
+Alice submits with payment (note `request_id` binding):
 
 ```bash
 creamlon submit bob/code-review-agent \
   --capability-id code_review \
   --input-hash sha256:... \
   --requester github:alice/my-agent \
+  --request-id 550e8400-e29b-41d4-a716-446655440000 \
   --payment-json ./payment.json
 ```
 
-`payment.json` example:
+`payment.json`:
 
 ```json
-{ "type": "evm", "txid": "0x..." }
+{
+  "type": "token",
+  "token": "<token-from-bob>",
+  "request_id": "550e8400-e29b-41d4-a716-446655440000"
+}
 ```
 
-Bob's node Skill verifies payment per `payment_instructions` before running `creamlon deliver`.
+Bob watches, then delivers (CLI verifies token before signing):
+
+```bash
+creamlon watch bob/code-review-agent --repo-path ./code-review-agent --once --pretty
+creamlon deliver bob/code-review-agent 42 --repo-path ./code-review-agent --output-file review.md
+```
+
+Invalid tasks:
+
+```bash
+creamlon reject bob/code-review-agent 43 --repo-path ./code-review-agent --pretty
+```
+
+Alice fetches proof:
+
+```bash
+creamlon fetch-proof bob/code-review-agent 42 --verify --pretty
+```

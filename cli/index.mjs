@@ -1,7 +1,7 @@
 ﻿import { readFile, writeFile, mkdir, readdir, stat, appendFile } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { hashText, hashFile, assertValidHashDigest } from '../lib/hash.mjs';
 import { fetchAgentYaml, parseRepoSlug, validateAgentYaml } from '../lib/agentYaml.mjs';
 import {
@@ -16,19 +16,22 @@ import {
 import {
   parseTaskYaml,
   validateTaskYaml,
-  isExpired,
   resolveInputHash,
   serializeTaskYaml,
   taskIssueTitle,
   isTaskIssue,
 } from '../lib/taskYaml.mjs';
-import { loadProcessedIds, hasProcessed } from '../lib/dedup.mjs';
+import { loadProcessedIds } from '../lib/dedup.mjs';
+import { validateTaskAcceptance, validateSubmitPaymentBinding } from '../lib/acceptance.mjs';
+import { loadPaymentTokens } from '../lib/payment/token.mjs';
+import { extractProofFromComments } from '../lib/proofComment.mjs';
 import {
   createIssue,
   listIssues,
   getIssue,
   createIssueComment,
   closeIssue,
+  getIssueComments,
   getGithubToken,
 } from '../lib/github.mjs';
 
@@ -37,13 +40,14 @@ const ROOT = join(__dirname, '..');
 const TEMPLATE_DIR = join(ROOT, 'template', 'agent-node');
 
 const HELP = {
-  main: `Creamlon - Creamlon protocol CLI v0.2
+  main: `Creamlon - Creamlon protocol CLI v0.3
 
 Usage:
   creamlon <command> [options]
 
 Commands:
   keygen [--out <dir>]              Generate Ed25519 key pair
+  token-new [--out <path>]          Generate payment token file
   hash <text>                       Hash text as sha256:...
   hash --file <path>                Hash file contents
   sign [options]                    Sign and output proof JSON
@@ -52,14 +56,20 @@ Commands:
   submit <owner/repo> [options]     Create task Issue (needs GITHUB_TOKEN)
   watch <owner/repo> [options]      List pending tasks (needs GITHUB_TOKEN)
   deliver <owner/repo> <issue#>     Sign and deliver proof (needs GITHUB_TOKEN)
+  reject <owner/repo> <issue#>      Reject task Issue (needs GITHUB_TOKEN)
+  fetch-proof <owner/repo> <issue#> Extract proof from Issue comments
   init <dir> [--name <name>]        Scaffold agent node from template
   help [command]                    Show help
 
-submit/watch/deliver require GITHUB_TOKEN or --token.
+submit/watch/deliver/reject/fetch-proof require GITHUB_TOKEN or --token.
 Run "creamlon help <command>" for details.`,
   keygen: `creamlon keygen [--out <dir>]
 
 Generate Ed25519 key pair. Writes public.key, private.key, public.b64url to --out (default: .creamlon).`,
+  tokenNew: `creamlon token-new [--out <path>]
+
+Generate a random payment token and write to --out (default: .creamlon/payment.token).
+Add more tokens one per line for rotation. File is gitignored via .creamlon/.`,
   hash: `creamlon hash <text>
 creamlon hash --file <path>
 
@@ -103,7 +113,8 @@ Options:
   watch: `creamlon watch <owner/repo> [options]
 
 Options:
-  --repo-path <dir>      Local node dir for proofs.log dedup (optional)
+  --repo-path <dir>      Local node dir for proofs.log dedup and payment token
+  --payment-token <tok>  Override node payment token for verification
   --ref <branch>         agent.yaml branch (default: main)
   --once                 Poll once and exit (default)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
@@ -113,10 +124,27 @@ Options:
 Options:
   --output-file <path>   Hash deliverable file for output_hash (required)
   --repo-path <dir>      Local node dir (default: .)
+  --payment-token <tok>  Override node payment token for verification
   --key <path>           Private key (default: <repo-path>/.creamlon/private.key)
   --ref <branch>         agent.yaml branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
   --dry-run              Print proof only; no GitHub or file writes
+  --pretty               Pretty-print JSON`,
+  reject: `creamlon reject <owner/repo> <issue-number> [options]
+
+Options:
+  --reason <text>        Rejection reason (default: validation errors joined)
+  --repo-path <dir>      Local node dir for proofs.log dedup and payment token
+  --payment-token <tok>  Override node payment token for verification
+  --ref <branch>         agent.yaml branch (default: main)
+  --token <pat>          GitHub token (or GITHUB_TOKEN)
+  --pretty               Pretty-print JSON`,
+  fetchProof: `creamlon fetch-proof <owner/repo> <issue-number> [options]
+
+Options:
+  --verify               Verify proof signature against agent.yaml public_key
+  --ref <branch>         agent.yaml branch (default: main)
+  --token <pat>          GitHub token (or GITHUB_TOKEN)
   --pretty               Pretty-print JSON`,
   init: `creamlon init <dir> [--name <name>]
 
@@ -142,6 +170,9 @@ function parseArgs(argv) {
     else if (arg === '--requester') { i += 1; opts.requester = argv[i]; }
     else if (arg === '--expires') { i += 1; opts.expires = argv[i]; }
     else if (arg === '--payment-json') { i += 1; opts.paymentJson = argv[i]; }
+    else if (arg === '--payment-token') { i += 1; opts.paymentToken = argv[i]; }
+    else if (arg === '--reason') { i += 1; opts.reason = argv[i]; }
+    else if (arg === '--verify') opts.verify = true;
     else if (arg === '--repo-path') { i += 1; opts.repoPath = argv[i]; }
     else if (arg === '--output-file') { i += 1; opts.outputFile = argv[i]; }
     else if (arg === '--key') { i += 1; opts.key = argv[i]; }
@@ -181,7 +212,20 @@ function resolveToken(opts) {
 async function loadAgentContext(slug, ref) {
   const { owner, repo } = parseRepoSlug(slug);
   const { parsed } = await fetchAgentYaml(owner, repo, ref || 'main');
+  const agentErrors = validateAgentYaml(parsed);
+  if (agentErrors.length) {
+    fail(`invalid agent.yaml: ${agentErrors.join('; ')}`);
+  }
   return { owner, repo, parsed };
+}
+
+async function loadPaymentSecrets(opts) {
+  const repoPath = resolve(opts.repoPath || '.');
+  const tokens = await loadPaymentTokens({
+    explicit: opts.paymentToken,
+    filePath: join(repoPath, '.creamlon', 'payment.token'),
+  });
+  return { tokens };
 }
 
 async function cmdKeygen(opts) {
@@ -308,6 +352,7 @@ async function cmdSubmit(positional, opts) {
     payment_required: paymentRequired,
     capability_ids: capIds,
   });
+  errors.push(...validateSubmitPaymentBinding(task));
   if (errors.length) fail(`invalid task: ${errors.join('; ')}`);
 
   const body = serializeTaskYaml(task);
@@ -330,8 +375,7 @@ async function cmdWatch(positional, opts) {
 
   const token = resolveToken(opts);
   const { owner, repo, parsed } = await loadAgentContext(slug, opts.ref);
-  const capIds = parsed.creamlon?.capabilities?.map((c) => c.id) || [];
-  const paymentRequired = parsed.creamlon?.payment_required === true;
+  const paymentSecrets = await loadPaymentSecrets(opts);
 
   let processed = new Set();
   if (opts.repoPath) {
@@ -345,15 +389,12 @@ async function cmdWatch(positional, opts) {
   const results = [];
   for (const issue of taskIssues) {
     const task = parseTaskYaml(issue.body || '');
-    const errors = validateTaskYaml(task, {
-      payment_required: paymentRequired,
-      capability_ids: capIds,
+    const acceptance = validateTaskAcceptance(task, issue, {
+      agentParsed: parsed,
+      processedIds: processed,
+      paymentSecrets,
+      checkIssueMeta: false,
     });
-
-    if (task.request_id && hasProcessed(processed, task.request_id)) {
-      errors.push('duplicate request_id in proofs.log');
-    }
-    if (isExpired(task)) errors.push('task expired');
 
     results.push({
       issue_number: issue.number,
@@ -362,8 +403,10 @@ async function cmdWatch(positional, opts) {
       request_id: task.request_id,
       capability_id: task.capability_id,
       requester: task.requester,
-      valid: errors.length === 0,
-      errors,
+      valid: acceptance.errors.length === 0,
+      errors: acceptance.errors,
+      payment_ok: acceptance.payment_ok,
+      payment_error: acceptance.payment_error,
     });
   }
 
@@ -387,23 +430,20 @@ async function cmdDeliver(positional, opts) {
   const proofsPath = join(repoPath, 'trust', 'proofs.log');
 
   const { owner, repo, parsed } = await loadAgentContext(slug, opts.ref);
-  const capIds = parsed.creamlon?.capabilities?.map((c) => c.id) || [];
-  const paymentRequired = parsed.creamlon?.payment_required === true;
+  const paymentSecrets = await loadPaymentSecrets(opts);
 
   const issue = await getIssue(owner, repo, issueNumber, token);
   const task = parseTaskYaml(issue.body || '');
-  const errors = validateTaskYaml(task, {
-    payment_required: paymentRequired,
-    capability_ids: capIds,
-  });
-  if (isExpired(task)) errors.push('task expired');
 
   const processed = await loadProcessedIds(proofsPath);
-  if (task.request_id && hasProcessed(processed, task.request_id)) {
-    errors.push('duplicate request_id in proofs.log');
-  }
+  const acceptance = validateTaskAcceptance(task, issue, {
+    agentParsed: parsed,
+    processedIds: processed,
+    paymentSecrets,
+    checkIssueMeta: true,
+  });
 
-  if (errors.length) fail(`cannot deliver: ${errors.join('; ')}`);
+  if (acceptance.errors.length) fail(`cannot deliver: ${acceptance.errors.join('; ')}`);
 
   const inputHash = resolveInputHash(task);
   const outputHash = await hashFile(opts.outputFile);
@@ -444,6 +484,94 @@ async function cmdDeliver(positional, opts) {
   }, opts.pretty);
 }
 
+async function cmdReject(positional, opts) {
+  const slug = positional[1];
+  const issueNumber = positional[2];
+  if (!slug) throw usageError('reject requires <owner/repo> <issue-number>');
+  if (!issueNumber) throw usageError('reject requires <issue-number>');
+
+  const token = resolveToken(opts);
+  const repoPath = resolve(opts.repoPath || '.');
+  const proofsPath = join(repoPath, 'trust', 'proofs.log');
+
+  const { owner, repo, parsed } = await loadAgentContext(slug, opts.ref);
+  const paymentSecrets = await loadPaymentSecrets(opts);
+
+  const issue = await getIssue(owner, repo, issueNumber, token);
+  const task = parseTaskYaml(issue.body || '');
+
+  const processed = await loadProcessedIds(proofsPath);
+  const acceptance = validateTaskAcceptance(task, issue, {
+    agentParsed: parsed,
+    processedIds: processed,
+    paymentSecrets,
+    checkIssueMeta: true,
+  });
+
+  const reason = opts.reason || acceptance.errors.join('; ') || 'task rejected';
+  const commentBody = `Creamlon rejection:\n\n${reason}`;
+  await createIssueComment(owner, repo, issueNumber, commentBody, token);
+  await closeIssue(owner, repo, issueNumber, token);
+
+  printJson({
+    ok: true,
+    issue_number: Number(issueNumber),
+    reason,
+    validation_errors: acceptance.errors,
+  }, opts.pretty);
+}
+
+async function cmdFetchProof(positional, opts) {
+  const slug = positional[1];
+  const issueNumber = positional[2];
+  if (!slug) throw usageError('fetch-proof requires <owner/repo> <issue-number>');
+  if (!issueNumber) throw usageError('fetch-proof requires <issue-number>');
+
+  const token = resolveToken(opts);
+  const { owner, repo, parsed } = await loadAgentContext(slug, opts.ref);
+
+  const comments = await getIssueComments(owner, repo, issueNumber, token);
+  const proof = extractProofFromComments(comments);
+
+  const out = {
+    ok: !!proof,
+    issue_number: Number(issueNumber),
+    proof,
+  };
+
+  if (!proof) {
+    printJson(out, opts.pretty);
+    fail('no proof found in issue comments');
+  }
+
+  if (opts.verify) {
+    const publicKeyB64 = parsed.creamlon?.public_key;
+    if (!publicKeyB64) fail('agent.yaml has no creamlon.public_key');
+    const publicKey = publicKeyFromBase64Url(publicKeyB64);
+    out.verify = verifyProof(proof, publicKey);
+  }
+
+  printJson(out, opts.pretty);
+  if (opts.verify && !out.verify.ok) {
+    fail(out.verify.reason || 'verification failed');
+  }
+}
+
+async function cmdTokenNew(opts) {
+  const outPath = opts.out || '.creamlon/payment.token';
+  const tokenValue = randomBytes(32).toString('hex');
+  await mkdir(dirname(resolve(outPath)), { recursive: true });
+  await writeFile(outPath, `${tokenValue}\n`, { flag: 'wx' }).catch(async (e) => {
+    if (e.code === 'EEXIST') {
+      await appendFile(outPath, `${tokenValue}\n`, 'utf8');
+      return;
+    }
+    throw e;
+  });
+  console.log(`Payment token written to ${outPath}`);
+  console.log('Distribute this token to callers; never commit .creamlon/payment.token');
+}
+
 async function copyTemplate(src, dest, name) {
   await mkdir(dest, { recursive: true });
   const entries = await readdir(src, { withFileTypes: true });
@@ -477,6 +605,7 @@ async function cmdInit(positional, opts) {
   await copyTemplate(TEMPLATE_DIR, dest, name);
   console.log(`Created agent node at ${dest}`);
   console.log(`Next: creamlon keygen --out ${join(dest, '.creamlon')}`);
+  console.log(`Next: creamlon token-new --out ${join(dest, '.creamlon', 'payment.token')}`);
   console.log('Then paste public_key into agent.yaml and push to GitHub.');
 }
 
@@ -492,7 +621,8 @@ export async function runCli(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '-h' || cmd === '--help') {
     const topic = rest[0];
-    console.log(topic && HELP[topic] ? HELP[topic] : HELP.main);
+    const helpKey = topic === 'token-new' ? 'tokenNew' : topic === 'fetch-proof' ? 'fetchProof' : topic;
+    console.log(helpKey && HELP[helpKey] ? HELP[helpKey] : HELP.main);
     return;
   }
 
@@ -502,6 +632,9 @@ export async function runCli(argv) {
   switch (command) {
     case 'keygen':
       await cmdKeygen(opts);
+      break;
+    case 'token-new':
+      await cmdTokenNew(opts);
       break;
     case 'hash':
       await cmdHash(positional, opts);
@@ -523,6 +656,12 @@ export async function runCli(argv) {
       break;
     case 'deliver':
       await cmdDeliver(positional, opts);
+      break;
+    case 'reject':
+      await cmdReject(positional, opts);
+      break;
+    case 'fetch-proof':
+      await cmdFetchProof(positional, opts);
       break;
     case 'init':
       await cmdInit(positional, opts);

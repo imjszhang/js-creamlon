@@ -19,6 +19,24 @@ creamlon:
   assert.match(parsed.creamlon.payment_instructions, /request_id/);
 });
 
+test('parseAgentYaml reads payment.type token', () => {
+  const yaml = `name: paid-agent
+description: Paid node
+creamlon:
+  version: "0.3"
+  public_key: abc
+  payment_required: true
+  payment_instructions: Get token from operator
+  payment:
+    type: token
+  capabilities:
+    - id: echo
+      description: Echo
+`;
+  const parsed = parseAgentYaml(yaml);
+  assert.equal(parsed.creamlon.payment.type, 'token');
+});
+
 test('validateAgentYaml warns when payment_required without instructions', () => {
   const parsed = {
     name: 'x',

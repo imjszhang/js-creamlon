@@ -19,18 +19,21 @@ npm link
 creamlon help
 ```
 
-Requires Node.js 18+. For `submit` / `watch` / `deliver`, set `GITHUB_TOKEN`.
+Requires Node.js 18+. For GitHub commands, set `GITHUB_TOKEN`.
 
 ## Quick start: create a node
 
 ```bash
 creamlon init ./my-agent-node --name my-agent
 creamlon keygen --out ./my-agent-node/.creamlon
+creamlon token-new --out ./my-agent-node/.creamlon/payment.token
 ```
 
 1. Copy `public.b64url` into `agent.yaml` → `creamlon.public_key`
 2. Push to a public GitHub repo
 3. Install `template/agent-node/SKILL.md` for local fulfillment guidance
+
+Public nodes should keep `payment_required: true` to limit Issue spam (v0.3 token gate).
 
 ## Quick start: call a node
 
@@ -40,13 +43,14 @@ creamlon inspect bob/code-review-agent --pretty
 creamlon submit bob/code-review-agent \
   --capability-id code_review \
   --input "https://github.com/alice/project/pull/42" \
-  --requester github:alice/my-agent
+  --requester github:alice/my-agent \
+  --payment-json ./payment.json
 ```
 
 After delivery:
 
 ```bash
-creamlon verify --repo bob/code-review-agent --proof proof.json
+creamlon fetch-proof bob/code-review-agent 42 --verify --pretty
 ```
 
 ## Install caller Skill
@@ -60,13 +64,14 @@ js-creamlon/
 ├── SKILL.md              # Caller skill
 ├── bin/creamlon.mjs      # CLI entry
 ├── cli/                  # Command router
-├── lib/                  # proof, agentYaml, taskYaml, github, hash
+├── lib/                  # proof, payment, acceptance, github, hash
 ├── references/           # Protocol spec + examples
 └── template/agent-node/  # GitHub template source
 ```
 
 ## Documentation
 
+- [Protocol v0.3](references/spec-v0.3.md)
 - [Protocol v0.2](references/spec-v0.2.md)
 - [Protocol v0.1](references/spec-v0.1.md) (proof baseline)
 - [Alice/Bob example](references/examples.md)
@@ -77,12 +82,12 @@ js-creamlon/
 npm test
 ```
 
-## v0.2 scope
+## v0.3 scope
 
-- GAP-inspired optional fields: `expires`, `input_ref`, `payment` hook
-- `creamlon submit` / `watch` / `deliver` (GitHub API)
+- Token payment verification (anti-DDoS gate for public nodes)
+- `creamlon reject`, `fetch-proof`, `token-new`
+- Unified task acceptance in `watch` / `deliver`
 - Proof format unchanged (v0.1 Ed25519)
-- Payment verification documented only (no chain/Stripe validators)
 
 ## License
 
