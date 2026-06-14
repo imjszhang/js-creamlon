@@ -9,8 +9,8 @@ test('loadProcessedIdsFromText extracts request_ids', async () => {
   const fields = buildProofFields({
     requestId: 'req-a',
     capabilityId: 'echo',
-    inputHash: hashText('in'),
-    outputHash: hashText('out'),
+    inputDigest: hashText('in'),
+    outputDigest: hashText('out'),
     completedAt: '2026-06-13T00:00:00.000Z',
   });
   const proof = signProof(fields, privateKey);

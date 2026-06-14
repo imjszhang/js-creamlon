@@ -5,38 +5,50 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   loadHmacKeys,
-  signHmacPayment,
-  verifyHmacPayment,
-} from '../lib/payment.mjs';
+  signHmacAuthorization,
+  verifyHmacAuthorization,
+} from '../lib/authorizationHmac.mjs';
 import { hashText } from '../lib/hash.mjs';
 
-test('HMAC payment binds request, capability, input hash, and expiry', () => {
+test('HMAC authorization binds request, capability, input digest, and expiry', () => {
   const task = {
+    version: '1',
     request_id: 'req-hmac',
     capability_id: 'echo',
-    input: 'hello',
-    input_hash: null,
-    input_ref: null,
+    input: { media_type: 'text/plain', value: 'hello' },
   };
-  const payment = signHmacPayment(task, {
+  const authorization = signHmacAuthorization(task, {
     keyId: 'customer-1',
     secret: 'secret',
     expires: '2099-01-01T00:00:00Z',
   });
   const keys = new Map([['customer-1', 'secret']]);
-  assert.equal(verifyHmacPayment(task, payment, keys).ok, true);
-  assert.equal(verifyHmacPayment({ ...task, capability_id: 'review' }, payment, keys).ok, false);
-  assert.equal(verifyHmacPayment({ ...task, input: null, input_hash: hashText('other') }, payment, keys).ok, false);
+  assert.equal(verifyHmacAuthorization(task, authorization, keys).ok, true);
+  assert.equal(verifyHmacAuthorization({ ...task, capability_id: 'review' }, authorization, keys).ok, false);
+  assert.equal(verifyHmacAuthorization({
+    ...task,
+    input: { media_type: 'text/plain', digest: hashText('other') },
+  }, authorization, keys).ok, false);
 });
 
-test('HMAC payment rejects expired credential', () => {
-  const task = { request_id: 'r', capability_id: 'echo', input: 'x' };
-  const payment = signHmacPayment(task, {
+test('HMAC authorization rejects expired credential', () => {
+  const task = {
+    version: '1',
+    request_id: 'r',
+    capability_id: 'echo',
+    input: { media_type: 'text/plain', value: 'x' },
+  };
+  const authorization = signHmacAuthorization(task, {
     keyId: 'k',
     secret: 's',
     expires: '2020-01-01T00:00:00Z',
   });
-  const result = verifyHmacPayment(task, payment, new Map([['k', 's']]), new Date('2026-01-01'));
+  const result = verifyHmacAuthorization(
+    task,
+    authorization,
+    new Map([['k', 's']]),
+    new Date('2026-01-01'),
+  );
   assert.equal(result.ok, false);
   assert.match(result.reason, /expired/);
 });

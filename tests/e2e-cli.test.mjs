@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { runCli } from '../cli/index.mjs';
 import { parseProofJson, publicKeyFromBase64Url, verifyProof, signProof, buildProofFields, generateKeyPair } from '../lib/proof.mjs';
 import { hashText, hashDigestError } from '../lib/hash.mjs';
-import { parseAgentYaml } from '../lib/agentYaml.mjs';
+import { parseManifest } from '../lib/manifest.mjs';
 import { parseProofsLog } from '../lib/proofsLog.mjs';
 import { verifyKeyContinuity } from '../lib/identity.mjs';
 
@@ -21,8 +21,8 @@ test('cli init keygen sign verify e2e', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-e2e-'));
   try {
     await runCli(['init', dir, '--name', 'e2e-agent']);
-    const agentYaml = await readFile(join(dir, 'agent.yaml'), 'utf8');
-    assert.match(agentYaml, /name: e2e-agent/);
+    const manifestText = await readFile(join(dir, 'CREAMLON.md'), 'utf8');
+    assert.match(manifestText, /name: e2e-agent/);
 
     const gitignore = await readFile(join(dir, '.gitignore'), 'utf8');
     assert.match(gitignore, /\.creamlon\//);
@@ -35,8 +35,8 @@ test('cli init keygen sign verify e2e', async () => {
       'sign',
       '--request-id', 'req-e2e',
       '--capability-id', 'echo',
-      '--input-hash', digest,
-      '--output-hash', digest,
+      '--input-digest', digest,
+      '--output-digest', digest,
       '--key', join(dir, '.creamlon', 'private.key'),
     ]);
     assert.equal(sign.status, 0, sign.stderr);
@@ -70,12 +70,12 @@ test('cli sign rejects invalid hash format', () => {
     'sign',
     '--request-id', 'req-1',
     '--capability-id', 'echo',
-    '--input-hash', 'sha256:aa',
-    '--output-hash', hashText('out'),
+    '--input-digest', 'sha256:aa',
+    '--output-digest', hashText('out'),
     '--key', 'missing.key',
   ]);
   assert.notEqual(sign.status, 0);
-  assert.match(sign.stderr, /invalid input_hash/);
+  assert.match(sign.stderr, /invalid input_digest/);
 });
 
 test('cli rejects option without a value', () => {
@@ -111,28 +111,38 @@ test('cli init rejects non-empty directory', async () => {
   }
 });
 
-test('parseAgentYaml handles quoted name and multiple capabilities', () => {
-  const yaml = `name: "my agent"
+test('parseManifest handles quoted name and multiple capabilities', () => {
+  const yaml = `---
+version: "1"
+name: "my agent"
 description: Demo
-creamlon:
-  version: "0.3.1"
+identity:
+  type: ed25519
   public_key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-  status: available
-  payment_instructions: Contact operator
-  capabilities:
-    - id: echo
-      description: Echo
-      input_types: [text/plain]
-      output_types: [text/plain]
-    - id: review
-      description: Review
-      input_types: [text/uri-list]
-      output_types: [text/markdown]
+status: available
+capabilities:
+  - id: echo
+    description: Echo
+    input:
+      media_types: [text/plain]
+    output:
+      media_types: [text/plain]
+  - id: review
+    description: Review
+    input:
+      media_types: [text/uri-list]
+    output:
+      media_types: [text/markdown]
+profiles:
+  github:
+    transport: issues
+extensions: {}
+---
 `;
-  const parsed = parseAgentYaml(yaml);
+  const parsed = parseManifest(yaml);
   assert.equal(parsed.name, 'my agent');
-  assert.equal(parsed.creamlon.capabilities.length, 2);
-  assert.deepEqual(parsed.creamlon.capabilities.map((c) => c.id), ['echo', 'review']);
+  assert.equal(parsed.capabilities.length, 2);
+  assert.deepEqual(parsed.capabilities.map((c) => c.id), ['echo', 'review']);
 });
 
 test('hashDigestError validates sha256 format', () => {
@@ -145,8 +155,8 @@ test('parseProofsLog skips comments and blank lines', async () => {
   const fields = buildProofFields({
     requestId: 'req-log',
     capabilityId: 'echo',
-    inputHash: hashText('in'),
-    outputHash: hashText('out'),
+    inputDigest: hashText('in'),
+    outputDigest: hashText('out'),
     completedAt: '2026-06-13T00:00:00.000Z',
   });
   const proof = signProof(fields, privateKey);
@@ -161,15 +171,15 @@ test('audit verifies a valid local proof log', async () => {
   try {
     await runCli(['init', dir, '--name', 'audit-agent']);
     const { privateKey, publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon'));
-    const agentPath = join(dir, 'agent.yaml');
+    const agentPath = join(dir, 'CREAMLON.md');
     const agentText = (await readFile(agentPath, 'utf8'))
       .replace('REPLACE_WITH_public.b64url', publicKeyBase64Url);
     await writeFile(agentPath, agentText, 'utf8');
     const proof = signProof(buildProofFields({
       requestId: 'req-audit',
       capabilityId: 'echo',
-      inputHash: hashText('in'),
-      outputHash: hashText('out'),
+      inputDigest: hashText('in'),
+      outputDigest: hashText('out'),
       completedAt: '2026-06-13T00:00:00.000Z',
     }), privateKey);
     await writeFile(join(dir, 'trust', 'proofs.log'), `${JSON.stringify(proof)}\n`, 'utf8');
@@ -196,22 +206,22 @@ test('status publishes audit health and key-rotate records continuity', async ()
     await runCli(['init', dir, '--name', 'status-agent']);
     const oldKeys = await generateKeyPair(join(dir, '.creamlon'));
     const newKeys = await generateKeyPair(null);
-    const agentPath = join(dir, 'agent.yaml');
+    const agentPath = join(dir, 'CREAMLON.md');
     const agentText = (await readFile(agentPath, 'utf8'))
       .replace('REPLACE_WITH_public.b64url', oldKeys.publicKeyBase64Url);
     await writeFile(agentPath, agentText, 'utf8');
     const historicalProof = signProof(buildProofFields({
       requestId: 'before-rotation',
       capabilityId: 'echo',
-      inputHash: hashText('before'),
-      outputHash: hashText('before'),
+      inputDigest: hashText('before'),
+      outputDigest: hashText('before'),
       completedAt: '2026-06-13T00:00:00.000Z',
     }), oldKeys.privateKey);
     await writeFile(join(dir, 'trust', 'proofs.log'), `${JSON.stringify(historicalProof)}\n`, 'utf8');
 
     await runCli(['status', '--repo-path', dir]);
     const status = JSON.parse(await readFile(join(dir, 'trust', 'status.json'), 'utf8'));
-    assert.equal(status.v, '0.3.1');
+    assert.equal(status.version, '1');
     assert.equal(status.status, 'available');
     assert.equal(status.proofs_valid, true);
 
@@ -242,7 +252,7 @@ test('key-rotate rejects a private key that does not match the old public key', 
     const oldKeys = await generateKeyPair(null);
     const wrongKeys = await generateKeyPair(join(dir, '.creamlon'));
     const newKeys = await generateKeyPair(null);
-    const agentPath = join(dir, 'agent.yaml');
+    const agentPath = join(dir, 'CREAMLON.md');
     const agentText = (await readFile(agentPath, 'utf8'))
       .replace('REPLACE_WITH_public.b64url', newKeys.publicKeyBase64Url);
     await writeFile(agentPath, agentText, 'utf8');

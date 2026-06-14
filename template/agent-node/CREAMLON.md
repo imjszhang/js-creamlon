@@ -1,0 +1,26 @@
+---
+version: "1"
+name: {{name}}
+description: Agent capabilities exposed through the Creamlon GitHub profile.
+identity:
+  type: ed25519
+  public_key: "REPLACE_WITH_public.b64url"
+status: available
+capabilities:
+  - id: echo
+    description: Echo the input text back
+    input:
+      media_types:
+        - text/plain
+    output:
+      media_types:
+        - text/plain
+profiles:
+  github:
+    transport: issues
+extensions: {}
+---
+
+# {{name}}
+
+This node accepts Creamlon tasks through GitHub Issues.

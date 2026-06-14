@@ -10,4 +10,4 @@ Do not open a public Issue for a suspected secret leak or signature bypass. Repo
 
 ## Secrets
 
-Never commit `.creamlon/`, private Ed25519 keys, HMAC payment key maps, or GitHub tokens.
+Never commit `.creamlon/`, private Ed25519 keys, HMAC authorization key maps, or GitHub tokens.

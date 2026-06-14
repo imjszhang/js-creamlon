@@ -17,19 +17,29 @@ import {
 } from '../lib/proof.mjs';
 import { hashText } from '../lib/hash.mjs';
 
-function agentYaml(publicKey, status = 'available') {
-  return `name: echo-node
+function manifestYaml(publicKey, status = 'available') {
+  return `---
+version: "1"
+name: echo-node
 description: Public echo service
-creamlon:
-  version: "0.3.1"
+identity:
+  type: ed25519
   public_key: ${publicKey}
-  status: ${status}
-  payment_instructions: Contact operator
-  capabilities:
-    - id: echo
-      description: Echo text
-      input_types: [text/plain]
-      output_types: [text/plain]
+status: ${status}
+capabilities:
+  - id: echo
+    description: Echo text
+    input:
+      media_types: [text/plain]
+    output:
+      media_types: [text/plain]
+profiles:
+  github:
+    transport: issues
+extensions: {}
+---
+
+# Echo node
 `;
 }
 
@@ -54,8 +64,8 @@ test('discoverRepositories validates, filters, and summarizes public trust files
   const proof = signProof(buildProofFields({
     requestId: 'request-1',
     capabilityId: 'echo',
-    inputHash: hashText('hello'),
-    outputHash: hashText('hello'),
+    inputDigest: hashText('hello'),
+    outputDigest: hashText('hello'),
     completedAt: '2026-06-13T12:00:00.000Z',
   }), currentKeys.privateKey);
   const rotation = signKeyRotation({
@@ -64,16 +74,16 @@ test('discoverRepositories validates, filters, and summarizes public trust files
     rotatedAt: '2026-06-12T00:00:00.000Z',
   }, oldKeys.privateKey);
   const files = new Map([
-    ['owner/good:agent.yaml', agentYaml(currentKeys.publicKeyBase64Url)],
+    ['owner/good:CREAMLON.md', manifestYaml(currentKeys.publicKeyBase64Url)],
     ['owner/good:trust/proofs.log', `${JSON.stringify(proof)}\n`],
     ['owner/good:trust/key-rotations.log', `${JSON.stringify(rotation)}\n`],
     ['owner/good:trust/status.json', JSON.stringify({
-      v: '0.3.1',
+      version: '1',
       status: 'available',
       checked_at: '2026-06-14T00:00:00.000Z',
       proofs_valid: true,
     })],
-    ['owner/offline:agent.yaml', agentYaml(currentKeys.publicKeyBase64Url, 'offline')],
+    ['owner/offline:CREAMLON.md', manifestYaml(currentKeys.publicKeyBase64Url, 'offline')],
   ]);
 
   const result = await discoverRepositories([
@@ -108,8 +118,8 @@ test('discovery verifies historical proofs with the key active at completion tim
   const proof = signProof(buildProofFields({
     requestId: 'old-request',
     capabilityId: 'echo',
-    inputHash: hashText('old'),
-    outputHash: hashText('old'),
+    inputDigest: hashText('old'),
+    outputDigest: hashText('old'),
     completedAt: '2026-06-01T00:00:00.000Z',
   }), oldKeys.privateKey);
   const rotation = signKeyRotation({
@@ -118,7 +128,7 @@ test('discovery verifies historical proofs with the key active at completion tim
     rotatedAt: '2026-06-10T00:00:00.000Z',
   }, oldKeys.privateKey);
   const files = {
-    'agent.yaml': agentYaml(currentKeys.publicKeyBase64Url),
+    'CREAMLON.md': manifestYaml(currentKeys.publicKeyBase64Url),
     'trust/proofs.log': `${JSON.stringify(proof)}\n`,
     'trust/key-rotations.log': `${JSON.stringify(rotation)}\n`,
   };

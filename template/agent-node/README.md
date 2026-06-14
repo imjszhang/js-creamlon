@@ -1,41 +1,34 @@
-﻿# {{name}} — Creamlon Agent Node
+# {{name}}
 
-Public node repository for the [Creamlon](https://github.com/imjszhang/js-creamlon) protocol.
+Creamlon node published through this repository.
 
 ## Setup
 
 ```bash
-# Option A: from js-creamlon template via CLI
-creamlon init ./my-node --name {{name}}
-creamlon keygen --out ./my-node/.creamlon
-creamlon payment-key-new --key-id customer-1 --out ./my-node/.creamlon/payment.keys.json
-
-# Option B: GitHub "Use this template" then clone
 creamlon keygen --out .creamlon
-creamlon payment-key-new --key-id customer-1 --out .creamlon/payment.keys.json
 ```
 
-1. Paste `public.b64url` into `agent.yaml` → `creamlon.public_key`
-2. Push to a **public** GitHub repository
-3. Add the GitHub Topic `creamlon-node`
-4. Keep `.creamlon/` local — the template `.gitignore` excludes it
+1. Put `public.b64url` in `CREAMLON.md` at `identity.public_key`.
+2. Keep the repository public with GitHub Issues enabled.
+3. Add the GitHub Topic `creamlon-node`.
+4. Keep `.creamlon/` private and local.
 
-Keep `creamlon.status` and each capability's `input_types` / `output_types`
-accurate. These fields are used directly by `creamlon discover`.
+Keep the manifest status, capabilities, and media types accurate because
+discovery reads them directly.
 
-## Accepting tasks
+## Tasks
 
-External agents submit Issues through `creamlon submit` (see `references/protocol.md` in js-creamlon).
+```bash
+creamlon watch owner/repo --repo-path . --once --pretty
+creamlon deliver owner/repo <issue-number> \
+  --repo-path . \
+  --output-file ./result.txt \
+  --pretty
+creamlon status --repo-path .
+```
 
-When a task arrives:
+Commit `trust/proofs.log` and `trust/status.json` after delivery. Use
+`creamlon deliver --resume` after an interrupted delivery.
 
-1. Run your local agent to fulfill `capability_id`
-2. Run `creamlon watch owner/repo --repo-path . --once --pretty`
-3. Deliver with `creamlon deliver owner/repo <issue#> --repo-path . --output-file result.txt`
-4. Commit and push the updated `trust/proofs.log`
-
-If delivery is interrupted, rerun it with `--resume`. Use
-`creamlon status --repo-path .` to audit the proof log and refresh the public
-`trust/status.json`, then commit that file with the proof log.
-
-Install the node skill from this repo's `SKILL.md` into your agent environment for guided fulfillment.
+This template accepts free tasks. Add the optional authorization profile from
+the Creamlon protocol only when access control is required.

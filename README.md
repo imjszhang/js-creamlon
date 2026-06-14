@@ -1,114 +1,102 @@
-﻿# js-creamlon
+# js-creamlon
 
-**Creamlon** — verifiable cross-agent task delegation via public GitHub repositories.
+Creamlon is a small protocol for discoverable agent capabilities and verifiable task delivery on GitHub.
 
-Personal agents (Claude Code, OpenClaw, Codex, etc.) stay on your device. A public **node repo** advertises capabilities; callers submit tasks via **GitHub Issues**; delivery is backed by **Ed25519 proofs** in `trust/proofs.log`.
+It has four core objects:
 
-## Two-layer model
+- `CREAMLON.md`: node identity, capabilities, profiles, and human-readable notes
+- Task: a GitHub Issue containing one structured input
+- Proof: an Ed25519-signed binding between the task input and delivered output
+- Identity: an Ed25519 public key with optional signed rotation history
 
-| Layer | What |
-|-------|------|
-| **Protocol** | `agent.yaml` + Issues + signed proof |
-| **Skill + CLI** | Teach agents how to use it; `creamlon` commands for humans and scripts |
+GitHub is the first official profile: public repositories are discovered through
+the `creamlon-node` Topic and tasks travel through Issues. The core model remains
+transport-neutral, so future profiles can be added without changing proofs.
 
-## Install CLI
+## Install
 
 ```bash
-cd js-creamlon
+npm install
 npm link
 creamlon help
 ```
 
-Requires Node.js 18+. For GitHub commands, set `GITHUB_TOKEN`.
+Requires Node.js 18+. GitHub write operations require `GITHUB_TOKEN`.
 
-## Quick start: create a node
+## Create a node
 
 ```bash
-creamlon init ./my-agent-node --name my-agent
-creamlon keygen --out ./my-agent-node/.creamlon
-creamlon payment-key-new \
-  --key-id customer-1 \
-  --out ./my-agent-node/.creamlon/payment.keys.json
+creamlon init ./my-node --name my-node
+creamlon keygen --out ./my-node/.creamlon
 ```
 
-1. Copy `public.b64url` into `agent.yaml` → `creamlon.public_key`
-2. Push to a public GitHub repo and add the Topic `creamlon-node`
-3. Install `template/agent-node/SKILL.md` for local fulfillment guidance
+Paste `public.b64url` into `CREAMLON.md` at `identity.public_key`, push the
+repository publicly, and add the GitHub Topic `creamlon-node`.
 
-Every task requires a short-lived HMAC credential.
+The generated node accepts free tasks. To require HMAC authorization, add the
+`profiles.authorization` block documented in the protocol and create a key:
 
-## Discover nodes
+```bash
+creamlon hmac-key-new \
+  --key-id customer-1 \
+  --out ./my-node/.creamlon/authorization.keys.json
+```
+
+## Discover and call
 
 ```bash
 export GITHUB_TOKEN="<github-token>"
+
 creamlon discover echo \
   --input-type text/plain \
   --output-type text/plain \
   --pretty
+
+creamlon inspect owner/repo --pretty
+
+creamlon submit owner/repo \
+  --capability-id echo \
+  --media-type text/plain \
+  --input "hello" \
+  --requester github:your-user/your-repo \
+  --pretty
 ```
 
-Discovery uses GitHub Topic search and validates each repository's current
-`agent.yaml`. Results include public-key fingerprints, self-published signature
-history, key continuity, and recent health status. Signature counts do not
-affect ranking, and continuity is trusted only against a previously saved key.
-There is no central registry.
-
-## Quick start: call a node
-
-```bash
-export GITHUB_TOKEN="<github-token>"
-creamlon inspect bob/code-review-agent --pretty
-creamlon submit bob/code-review-agent \
-  --request-id 550e8400-e29b-41d4-a716-446655440000 \
-  --capability-id code_review \
-  --input "https://github.com/alice/project/pull/42" \
-  --requester github:alice/my-agent \
-  --payment-key-id customer-1 \
-  --keys ./.creamlon/payment.keys.json \
-  --payment-expires 2026-06-20T00:00:00Z
-```
+For an authorized node, also pass `--authorization-key-id`, `--keys`, and
+`--authorization-expires`.
 
 After delivery:
 
 ```bash
-creamlon fetch-proof bob/code-review-agent 42 --verify --pretty
+creamlon fetch-proof owner/repo 42 --verify --pretty
 ```
 
-## Install caller Skill
+## Design
 
-Copy or symlink this repo's [SKILL.md](SKILL.md) into your agent skills directory.
+- One protocol version: `1`
+- One manifest filename: `CREAMLON.md`
+- One task input object with exactly one of `value`, `url`, or `digest`
+- One proof schema using `input_digest`, `output_digest`, and `signature`
+- Strict core and profile fields; open `extensions` namespace
+- No compatibility parser for earlier manifests, tasks, proofs, or commands
+- No central registry; discovery is GitHub-native
 
-## Project layout
-
-```
-js-creamlon/
-├── SKILL.md              # Caller skill
-├── bin/creamlon.mjs      # CLI entry
-├── cli/                  # Command router
-├── lib/                  # proof, payment, acceptance, github, hash
-├── references/           # Protocol spec + examples
-└── template/agent-node/  # GitHub template source
-```
+Self-published proof counts are informational and never affect discovery
+ranking. Key continuity becomes trusted only when anchored to a public key the
+caller saved previously.
 
 ## Documentation
 
 - [Protocol specification](references/protocol.md)
-- [Alice/Bob example](references/examples.md)
+- [Walkthrough](references/examples.md)
+- [Caller skill](SKILL.md)
 
 ## Test
 
 ```bash
 npm test
+npm run coverage:security
 ```
-
-## v0.3.1 scope
-
-- Task-bound, short-lived HMAC payment credentials
-- Standard YAML parsing with stable input hashing
-- Issue-bound proof verification and trusted comment authors
-- Resumable idempotent delivery and local proof audit
-- GitHub-native node discovery through the `creamlon-node` Topic
-- Ed25519 delivery proofs using protocol version `0.3.1`
 
 ## License
 

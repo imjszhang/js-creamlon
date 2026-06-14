@@ -13,15 +13,15 @@ test('extractProofFromCommentBody parses deliver comment format', async () => {
   const fields = buildProofFields({
     requestId: 'req-proof-1',
     capabilityId: 'echo',
-    inputHash: hashText('in'),
-    outputHash: hashText('out'),
+    inputDigest: hashText('in'),
+    outputDigest: hashText('out'),
     completedAt: '2026-06-13T00:00:00.000Z',
   });
   const proof = signProof(fields, privateKey);
   const body = `Creamlon delivery proof:\n\n\`\`\`json\n${JSON.stringify(proof, null, 2)}\n\`\`\``;
   const extracted = extractProofFromCommentBody(body);
   assert.equal(extracted.request_id, 'req-proof-1');
-  assert.equal(extracted.sig, proof.sig);
+  assert.equal(extracted.signature, proof.signature);
 });
 
 test('extractProofFromComments returns latest proof comment', async () => {
@@ -30,8 +30,8 @@ test('extractProofFromComments returns latest proof comment', async () => {
     const fields = buildProofFields({
       requestId,
       capabilityId: 'echo',
-      inputHash: hashText('in'),
-      outputHash: hashText('out'),
+      inputDigest: hashText('in'),
+      outputDigest: hashText('out'),
       completedAt: '2026-06-13T00:00:00.000Z',
     });
     return signProof(fields, privateKey);
@@ -63,8 +63,8 @@ test('extractBoundProofFromComments rejects cross-issue replay and untrusted aut
   const proof = signProof(buildProofFields({
     requestId: 'other-request',
     capabilityId: 'echo',
-    inputHash: hashText('in'),
-    outputHash: hashText('out'),
+    inputDigest: hashText('in'),
+    outputDigest: hashText('out'),
     completedAt: '2026-06-13T00:00:00.000Z',
   }), privateKey);
   const body = `\`\`\`json\n${JSON.stringify(proof)}\n\`\`\``;

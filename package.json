@@ -1,7 +1,7 @@
 {
   "name": "js-creamlon",
-  "version": "0.3.1",
-  "description": "Creamlon protocol: verifiable cross-agent task delegation via GitHub repos (Skill + CLI)",
+  "version": "1.0.0",
+  "description": "Creamlon: lightweight identity and proof layer for discoverable agent capabilities",
   "type": "module",
   "bin": {
     "creamlon": "./bin/creamlon.mjs"
@@ -9,7 +9,7 @@
   "scripts": {
     "test": "node --test tests/**/*.test.mjs",
     "check": "node --check cli/index.mjs && npm test",
-    "coverage:security": "node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-include=lib/payment.mjs --test-coverage-include=lib/proofComment.mjs --test tests/**/*.test.mjs"
+    "coverage:security": "node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-include=lib/authorizationHmac.mjs --test-coverage-include=lib/proofComment.mjs --test tests/**/*.test.mjs"
   },
   "engines": {
     "node": ">=18.0.0"

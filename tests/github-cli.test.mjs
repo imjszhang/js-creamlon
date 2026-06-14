@@ -9,64 +9,82 @@ import {
   searchRepositories,
   setGithubFetch,
 } from '../lib/github.mjs';
-import { setAgentFetch } from '../lib/agentYaml.mjs';
+import { setManifestFetch } from '../lib/manifest.mjs';
 import { hashText } from '../lib/hash.mjs';
 import { buildProofFields, signProof, generateKeyPair } from '../lib/proof.mjs';
-import { signHmacPayment } from '../lib/payment.mjs';
-import { serializeTaskYaml } from '../lib/taskYaml.mjs';
+import { signHmacAuthorization } from '../lib/authorizationHmac.mjs';
+import { serializeTask } from '../lib/task.mjs';
 import { signKeyRotation } from '../lib/identity.mjs';
 
-const AGENT_YAML = `name: mock-node
+const MANIFEST_MD = `---
+version: "1"
+name: mock-node
 description: Mock
-creamlon:
-  version: "0.3.1"
+identity:
+  type: ed25519
   public_key: PLACEHOLDER
-  status: available
-  payment_instructions: Contact operator
-  capabilities:
-    - id: echo
-      description: Echo
-      input_types: [text/plain]
-      output_types: [text/plain]
+status: available
+capabilities:
+  - id: echo
+    description: Echo
+    input:
+      media_types: [text/plain]
+    output:
+      media_types: [text/plain]
+profiles:
+  github:
+    transport: issues
+  authorization:
+    scheme: hmac-sha256
+extensions: {}
+---
+
+# Mock node
 `;
+const FREE_MANIFEST_MD = MANIFEST_MD.replace(
+  '  authorization:\n    scheme: hmac-sha256\n',
+  '',
+);
 
-const PAYMENT_KEY_ID = 'customer-1';
-const PAYMENT_SECRET = 'node-secret';
-const PAYMENT_EXPIRES = '2099-01-01T00:00:00Z';
-const PAYMENT_DIR = await mkdtemp(join(tmpdir(), 'creamlon-test-keys-'));
-const PAYMENT_KEYS_PATH = join(PAYMENT_DIR, 'payment.keys.json');
-await writeFile(PAYMENT_KEYS_PATH, `${JSON.stringify({ [PAYMENT_KEY_ID]: PAYMENT_SECRET })}\n`, 'utf8');
-after(() => rm(PAYMENT_DIR, { recursive: true, force: true }));
+const AUTHORIZATION_KEY_ID = 'customer-1';
+const AUTHORIZATION_SECRET = 'node-secret';
+const AUTHORIZATION_EXPIRES = '2099-01-01T00:00:00Z';
+const AUTHORIZATION_DIR = await mkdtemp(join(tmpdir(), 'creamlon-test-keys-'));
+const AUTHORIZATION_KEYS_PATH = join(AUTHORIZATION_DIR, 'authorization.keys.json');
+await writeFile(AUTHORIZATION_KEYS_PATH, `${JSON.stringify({ [AUTHORIZATION_KEY_ID]: AUTHORIZATION_SECRET })}\n`, 'utf8');
+after(() => rm(AUTHORIZATION_DIR, { recursive: true, force: true }));
 
-function taskYaml({ requestId, input = 'hello', includePayment = true }) {
+function taskYaml({ requestId, input = 'hello', includeAuthorization = true }) {
   const task = {
+    version: '1',
     request_id: requestId,
     capability_id: 'echo',
     requester: 'github:alice/caller',
-    input,
-    input_hash: null,
-    input_ref: null,
+    input: {
+      media_type: 'text/plain',
+      value: input,
+    },
     expires: null,
-    payment: null,
+    authorization: null,
   };
-  if (includePayment) {
-    task.payment = signHmacPayment(task, {
-      keyId: PAYMENT_KEY_ID,
-      secret: PAYMENT_SECRET,
-      expires: PAYMENT_EXPIRES,
+  if (includeAuthorization) {
+    task.authorization = signHmacAuthorization(task, {
+      keyId: AUTHORIZATION_KEY_ID,
+      secret: AUTHORIZATION_SECRET,
+      expires: AUTHORIZATION_EXPIRES,
     });
   }
-  return serializeTaskYaml(task);
+  return serializeTask(task);
 }
 
-const PAYMENT_ARGS = [
-  '--payment-key-id', PAYMENT_KEY_ID,
-  '--keys', PAYMENT_KEYS_PATH,
-  '--payment-expires', PAYMENT_EXPIRES,
+const AUTHORIZATION_ARGS = [
+  '--authorization-key-id', AUTHORIZATION_KEY_ID,
+  '--keys', AUTHORIZATION_KEYS_PATH,
+  '--authorization-expires', AUTHORIZATION_EXPIRES,
 ];
 
-const NODE_PAYMENT_ARGS = [
-  '--keys', PAYMENT_KEYS_PATH,
+const NODE_AUTHORIZATION_ARGS = [
+  '--keys', AUTHORIZATION_KEYS_PATH,
 ];
 
 function installMockFetch(handler) {
@@ -80,12 +98,12 @@ function installMockFetch(handler) {
     };
   };
   setGithubFetch(fetchFn);
-  setAgentFetch(fetchFn);
+  setManifestFetch(fetchFn);
 }
 
 function resetFetch() {
   setGithubFetch(globalThis.fetch);
-  setAgentFetch(globalThis.fetch);
+  setManifestFetch(globalThis.fetch);
 }
 
 test('submit creates issue via mocked GitHub API', async () => {
@@ -95,7 +113,7 @@ test('submit creates issue via mocked GitHub API', async () => {
 
   installMockFetch((url, init) => {
     if (url.includes('raw.githubusercontent.com')) {
-      return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
+      return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', publicKeyBase64Url) };
     }
     if (url.endsWith('/issues') && init?.method === 'POST') {
       const body = JSON.parse(init.body);
@@ -113,9 +131,10 @@ test('submit creates issue via mocked GitHub API', async () => {
       'submit', 'owner/repo',
       '--capability-id', 'echo',
       '--input', 'hello',
+      '--media-type', 'text/plain',
       '--requester', 'github:alice/caller',
       '--request-id', 'req-submit-1',
-      ...PAYMENT_ARGS,
+      ...AUTHORIZATION_ARGS,
       '--token', 'test-token',
     ]);
   } finally {
@@ -132,7 +151,7 @@ test('submit requires an HMAC key', async () => {
 
   installMockFetch((url) => {
     if (url.includes('raw.githubusercontent.com')) {
-      return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
+      return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', publicKeyBase64Url) };
     }
     return { status: 404, body: { message: 'not found' } };
   });
@@ -143,14 +162,49 @@ test('submit requires an HMAC key', async () => {
         'submit', 'owner/repo',
         '--capability-id', 'echo',
         '--input', 'hello',
+        '--media-type', 'text/plain',
         '--requester', 'github:alice/caller',
         '--token', 'test-token',
       ]),
-      (err) => err.message.includes('--payment-key-id'),
+      (err) => err.message.includes('--authorization-key-id'),
     );
   } finally {
     resetFetch();
   }
+});
+
+test('submit supports a free node without authorization options', async () => {
+  const { publicKeyBase64Url } = await generateKeyPair(null);
+  const calls = [];
+  installMockFetch((url, init) => {
+    if (url.includes('raw.githubusercontent.com')) {
+      return { status: 200, body: FREE_MANIFEST_MD.replace('PLACEHOLDER', publicKeyBase64Url) };
+    }
+    if (url.endsWith('/issues') && init?.method === 'POST') {
+      calls.push(JSON.parse(init.body));
+      return {
+        status: 201,
+        body: { number: 8, html_url: 'https://github.com/o/r/issues/8', title: '[task] echo' },
+      };
+    }
+    return { status: 404, body: { message: 'not found' } };
+  });
+
+  try {
+    await runCli([
+      'submit', 'owner/repo',
+      '--capability-id', 'echo',
+      '--media-type', 'text/plain',
+      '--input', 'hello',
+      '--requester', 'github:alice/caller',
+      '--token', 'test-token',
+    ]);
+  } finally {
+    resetFetch();
+  }
+
+  assert.equal(calls.length, 1);
+  assert.doesNotMatch(calls[0].body, /authorization:/);
 });
 
 test('deliver dry-run signs proof from mocked issue', async () => {
@@ -164,7 +218,7 @@ test('deliver dry-run signs proof from mocked issue', async () => {
 
     installMockFetch((url, init) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/42') && !url.includes('/comments')) {
         return { status: 200, body: { number: 42, body: issueBody, title: '[task] echo', state: 'open' } };
@@ -178,7 +232,7 @@ test('deliver dry-run signs proof from mocked issue', async () => {
         '--repo-path', dir,
         '--output-file', outFile,
         '--key', join(dir, '.creamlon', 'private.key'),
-        ...NODE_PAYMENT_ARGS,
+        ...NODE_AUTHORIZATION_ARGS,
         '--token', 'test-token',
         '--dry-run',
         '--pretty',
@@ -191,18 +245,19 @@ test('deliver dry-run signs proof from mocked issue', async () => {
   }
 });
 
-test('deliver rejects a tampered payment', async () => {
+test('deliver rejects a tampered authorization', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-deliver-paid-'));
   try {
     const keygen = await generateKeyPair(join(dir, '.creamlon'));
     const outFile = join(dir, 'out.txt');
     await writeFile(outFile, 'result body', 'utf8');
 
-    const issueBody = taskYaml({ requestId: 'req-deliver-paid' }).replace('input: hello', 'input: tampered');
+    const issueBody = taskYaml({ requestId: 'req-deliver-paid' })
+      .replace('  value: hello', '  value: tampered');
 
     installMockFetch((url) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/55')) {
         return { status: 200, body: { number: 55, body: issueBody, title: '[task] echo', state: 'open' } };
@@ -217,10 +272,10 @@ test('deliver rejects a tampered payment', async () => {
           '--repo-path', dir,
           '--output-file', outFile,
           '--key', join(dir, '.creamlon', 'private.key'),
-          ...NODE_PAYMENT_ARGS,
+          ...NODE_AUTHORIZATION_ARGS,
           '--token', 'test-token',
         ]),
-        (err) => err.message.includes('invalid payment signature'),
+        (err) => err.message.includes('invalid authorization signature'),
       );
     } finally {
       resetFetch();
@@ -235,7 +290,7 @@ test('watch lists pending tasks with validation', async () => {
     if (url.includes('raw.githubusercontent.com')) {
       return {
         status: 200,
-        body: AGENT_YAML.replace('PLACEHOLDER', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'),
+        body: MANIFEST_MD.replace('PLACEHOLDER', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'),
       };
     }
     if (url.includes('/issues?')) {
@@ -261,7 +316,7 @@ test('watch lists pending tasks with validation', async () => {
   });
 
   try {
-    await runCli(['watch', 'owner/repo', ...NODE_PAYMENT_ARGS, '--token', 't', '--pretty']);
+    await runCli(['watch', 'owner/repo', ...NODE_AUTHORIZATION_ARGS, '--token', 't', '--pretty']);
   } finally {
     resetFetch();
   }
@@ -277,7 +332,7 @@ test('deliver dry-run output contains proof hashes', async () => {
 
     installMockFetch((url) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/99')) {
         return { status: 200, body: { number: 99, body: issueBody, title: '[task] echo', state: 'open' } };
@@ -294,7 +349,7 @@ test('deliver dry-run output contains proof hashes', async () => {
         '--repo-path', dir,
         '--output-file', outFile,
         '--key', join(dir, '.creamlon', 'private.key'),
-        ...NODE_PAYMENT_ARGS,
+        ...NODE_AUTHORIZATION_ARGS,
         '--token', 'test-token',
         '--dry-run',
         '--pretty',
@@ -306,7 +361,7 @@ test('deliver dry-run output contains proof hashes', async () => {
 
     const out = JSON.parse(logs.join('\n'));
     assert.equal(out.proof.request_id, 'req-deliver-2');
-    assert.equal(out.proof.input_hash, hashText('hello'));
+    assert.equal(out.proof.input_digest, hashText('hello'));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -324,7 +379,7 @@ test('deliver is resumable and idempotent across repeated execution', async () =
 
     installMockFetch((url, init) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/77')) {
         if (init?.method === 'PATCH') {
@@ -351,7 +406,7 @@ test('deliver is resumable and idempotent across repeated execution', async () =
         '--repo-path', dir,
         '--output-file', outFile,
         '--key', join(dir, '.creamlon', 'private.key'),
-        ...NODE_PAYMENT_ARGS,
+        ...NODE_AUTHORIZATION_ARGS,
         '--token', 'test-token',
       ];
       await runCli(args);
@@ -373,11 +428,11 @@ test('reject comments and closes issue', async () => {
   const calls = [];
   try {
     const keygen = await generateKeyPair(join(dir, '.creamlon'));
-    const issueBody = taskYaml({ requestId: 'req-reject', includePayment: false });
+    const issueBody = taskYaml({ requestId: 'req-reject', includeAuthorization: false });
 
     installMockFetch((url, init) => {
       if (url.includes('raw.githubusercontent.com')) {
-        return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
+        return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', keygen.publicKeyBase64Url) };
       }
       if (url.endsWith('/issues/12') && !url.includes('/comments')) {
         if (init?.method === 'PATCH') {
@@ -400,7 +455,7 @@ test('reject comments and closes issue', async () => {
       await runCli([
         'reject', 'owner/repo', '12',
         '--repo-path', dir,
-        ...NODE_PAYMENT_ARGS,
+        ...NODE_AUTHORIZATION_ARGS,
         '--token', 'test-token',
         '--pretty',
       ]);
@@ -413,7 +468,7 @@ test('reject comments and closes issue', async () => {
     assert.ok(calls.some((c) => c.type === 'close'));
     const out = JSON.parse(logs.join('\n'));
     assert.equal(out.ok, true);
-    assert.ok(out.reason.includes('missing payment'));
+    assert.ok(out.reason.includes('missing authorization'));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -425,8 +480,8 @@ test('fetch-proof extracts and verifies proof from comments', async () => {
   const fields = buildProofFields({
     requestId: 'req-fetch',
     capabilityId: 'echo',
-    inputHash: hashText('in'),
-    outputHash: hashText('out'),
+    inputDigest: hashText('in'),
+    outputDigest: hashText('out'),
     completedAt: '2026-06-13T00:00:00.000Z',
   });
   const proof = signProof(fields, oldKeys.privateKey);
@@ -439,7 +494,7 @@ test('fetch-proof extracts and verifies proof from comments', async () => {
 
   installMockFetch((url) => {
     if (url.includes('raw.githubusercontent.com')) {
-      return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', currentKeys.publicKeyBase64Url) };
+      return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', currentKeys.publicKeyBase64Url) };
     }
     if (url.includes('/contents/trust/key-rotations.log')) {
       return {
@@ -498,11 +553,11 @@ test('fetch-proof extracts and verifies proof from comments', async () => {
   assert.equal(out.key_continuity, 'self_consistent');
 });
 
-test('payment-key-new creates a private HMAC key', async () => {
+test('hmac-key-new creates a private HMAC authorization key', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-hmac-key-'));
   try {
-    const keysPath = join(dir, 'payment.keys.json');
-    await runCli(['payment-key-new', '--key-id', 'customer-1', '--out', keysPath]);
+    const keysPath = join(dir, 'authorization.keys.json');
+    await runCli(['hmac-key-new', '--key-id', 'customer-1', '--out', keysPath]);
     const keys = JSON.parse(await readFile(keysPath, 'utf8'));
     assert.match(keys['customer-1'], /^[A-Za-z0-9_-]+$/);
   } finally {
@@ -520,7 +575,7 @@ test('GitHub discovery API searches the required topic and reads repository file
         body: { items: [{ full_name: 'owner/node' }] },
       };
     }
-    if (url.includes('/repos/owner/node/contents/agent.yaml')) {
+    if (url.includes('/repos/owner/node/contents/CREAMLON.md')) {
       return {
         status: 200,
         body: {
@@ -534,7 +589,7 @@ test('GitHub discovery API searches the required topic and reads repository file
   });
   try {
     const repos = await searchRepositories({ token: 'test-token', limit: 10 });
-    const text = await getRepositoryFile('owner', 'node', 'agent.yaml', 'main', 'test-token');
+    const text = await getRepositoryFile('owner', 'node', 'CREAMLON.md', 'main', 'test-token');
     assert.equal(repos[0].full_name, 'owner/node');
     assert.equal(text, 'name: node\n');
     assert.ok(urls.some((url) => url.includes('q=topic%3Acreamlon-node+is%3Apublic')));
@@ -547,7 +602,7 @@ test('GitHub discovery API searches the required topic and reads repository file
 test('inspect reports an invalid public key without crashing', async () => {
   installMockFetch((url) => {
     if (url.includes('raw.githubusercontent.com')) {
-      return { status: 200, body: AGENT_YAML.replace('PLACEHOLDER', 'invalid-key') };
+      return { status: 200, body: MANIFEST_MD.replace('PLACEHOLDER', 'invalid-key') };
     }
     return { status: 404, body: { message: 'not found' } };
   });
@@ -563,5 +618,5 @@ test('inspect reports an invalid public key without crashing', async () => {
   const result = JSON.parse(logs.join('\n'));
   assert.equal(result.valid, false);
   assert.equal(result.public_key_fingerprint, null);
-  assert.ok(result.errors.includes('invalid creamlon.public_key'));
+  assert.ok(result.errors.includes('invalid identity.public_key'));
 });

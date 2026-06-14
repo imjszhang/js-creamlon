@@ -3,7 +3,7 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPublicKey, randomUUID, randomBytes } from 'node:crypto';
 import { hashText, hashFile, assertValidHashDigest } from '../lib/hash.mjs';
-import { fetchAgentYaml, parseAgentYaml, parseRepoSlug, validateAgentYaml } from '../lib/agentYaml.mjs';
+import { fetchManifest, parseManifest, parseRepoSlug, validateManifest } from '../lib/manifest.mjs';
 import {
   buildProofFields,
   generateKeyPair,
@@ -16,20 +16,20 @@ import {
   verifyProof,
 } from '../lib/proof.mjs';
 import {
-  parseTaskYaml,
-  validateTaskYaml,
-  resolveInputHash,
-  serializeTaskYaml,
+  parseTask,
+  validateTask,
+  resolveInputDigest,
+  serializeTask,
   taskIssueTitle,
   isTaskIssue,
-} from '../lib/taskYaml.mjs';
+} from '../lib/task.mjs';
 import { loadProcessedIds } from '../lib/dedup.mjs';
 import { validateTaskAcceptance } from '../lib/acceptance.mjs';
 import {
   generateHmacSecret,
   loadHmacKeys,
-  signHmacPayment,
-} from '../lib/payment.mjs';
+  signHmacAuthorization,
+} from '../lib/authorizationHmac.mjs';
 import {
   extractBoundProofFromComments,
   verifyProofBinding,
@@ -63,17 +63,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const TEMPLATE_DIR = join(ROOT, 'template', 'agent-node');
 const VALUE_OPTIONS = new Set([
-  '--out', '--file', '--request-id', '--capability-id', '--input-hash', '--output-hash',
-  '--input', '--input-ref-url', '--requester', '--expires',
-  '--payment-key-id', '--key-id',
-  '--payment-expires', '--keys', '--reason', '--repo-path', '--output-file', '--key',
+  '--out', '--file', '--request-id', '--capability-id', '--input-digest', '--output-digest',
+  '--input', '--input-url', '--media-type', '--requester', '--expires',
+  '--authorization-key-id', '--key-id', '--authorization-expires',
+  '--keys', '--reason', '--repo-path', '--output-file', '--key',
   '--completed-at', '--repo', '--public-key', '--proof', '--name', '--ref', '--token',
   '--input-type', '--output-type', '--status', '--limit', '--sort', '--cache-ttl',
   '--old-public-key', '--new-public-key', '--rotated-at', '--status-out',
 ]);
 
 const HELP = {
-  main: `Creamlon - Creamlon protocol CLI v0.3.1
+  main: `Creamlon - Creamlon protocol CLI v1.0.0
 
 Usage:
   creamlon <command> [options]
@@ -81,12 +81,12 @@ Usage:
 Commands:
   keygen [--out <dir>]              Generate Ed25519 key pair
   key-rotate [options]              Record a signed public-key rotation
-  payment-key-new [options]         Generate HMAC payment key
+  hmac-key-new [options]            Generate HMAC authorization key
   hash <text>                       Hash text as sha256:...
   hash --file <path>                Hash file contents
   sign [options]                    Sign and output proof JSON
   verify [options]                  Verify proof signature
-  inspect <owner/repo>              Fetch and show agent.yaml
+  inspect <owner/repo>              Fetch and show CREAMLON.md
   discover <capability-id>          Find nodes via GitHub Topic search
   submit <owner/repo> [options]     Create task Issue (needs GITHUB_TOKEN)
   watch <owner/repo> [options]      List pending tasks (needs GITHUB_TOKEN)
@@ -107,34 +107,34 @@ Generate Ed25519 key pair. Writes public.key, private.key, public.b64url to --ou
 
 Options:
   --old-public-key <b64>  Previous public key
-  --new-public-key <b64>  New public key now published in agent.yaml
+  --new-public-key <b64>  New public key now published in CREAMLON.md
   --key <path>            Previous private key (default: .creamlon/private.key)
   --rotated-at <iso>      Optional rotation timestamp
   --repo-path <dir>       Node repository (default: .)
 
 Appends a signed record to trust/key-rotations.log.`,
-  paymentKeyNew: `creamlon payment-key-new --key-id <id> [--out <path>]
+  hmacKeyNew: `creamlon hmac-key-new --key-id <id> [--out <path>]
 
-Generate an HMAC payment key in JSON format (default: .creamlon/payment.keys.json).`,
+Generate an HMAC authorization key map (default: .creamlon/authorization.keys.json).`,
   hash: `creamlon hash <text>
 creamlon hash --file <path>
 
-Compute sha256:... digest for proof input_hash / output_hash.
+Compute a sha256:... digest.
 Multi-word text is joined with spaces; quote text that contains shell metacharacters.`,
   sign: `creamlon sign [options]
 
 Options:
   --request-id <uuid>
   --capability-id <id>
-  --input-hash <sha256:...>
-  --output-hash <sha256:...>
+  --input-digest <sha256:...>
+  --output-digest <sha256:...>
   --key <path>          Private key file (default: .creamlon/private.key)
   --completed-at <iso>  Optional ISO timestamp
   --pretty              Pretty-print JSON`,
   verify: `creamlon verify [options]
 
 Options:
-  --repo <owner/repo>   Fetch public_key from agent.yaml
+  --repo <owner/repo>   Fetch identity from CREAMLON.md
   --ref <branch>        Git branch (default: main)
   --token <pat>         Load key rotations for historical proofs
   --public-key <b64>    Or supply public key directly
@@ -142,7 +142,7 @@ Options:
   --pretty              Pretty-print JSON result`,
   inspect: `creamlon inspect <owner/repo> [--ref main]
 
-Fetch agent.yaml from GitHub and display capabilities.`,
+Fetch CREAMLON.md from GitHub and display capabilities.`,
   discover: `creamlon discover <capability-id> [options]
 
 Find nodes through the required GitHub Topic "creamlon-node".
@@ -162,15 +162,16 @@ Options:
 Options:
   --capability-id <id>   Required
   --requester <github:user/repo>  Required
-  --input <text>         Task input (or --input-hash / --input-ref-url)
-  --input-hash <sha256:...>
-  --input-ref-url <url>
+  --input <text>         Inline task input
+  --input-digest <sha256:...>
+  --input-url <url>
+  --media-type <type>    Required input media type
   --request-id <uuid>    Default: random UUID
   --expires <iso>        Optional expiry
-  --payment-key-id <id>  Required; sign HMAC payment during submit
-  --keys <path>          Required; private HMAC key map
-  --payment-expires <iso> Required; HMAC credential expiry
-  --ref <branch>         agent.yaml branch (default: main)
+  --authorization-key-id <id>  Required only when the node declares authorization
+  --keys <path>                 Private HMAC key map
+  --authorization-expires <iso>
+  --ref <branch>         CREAMLON.md branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
   --pretty               Pretty-print result JSON`,
   watch: `creamlon watch <owner/repo> [options]
@@ -178,18 +179,18 @@ Options:
 Options:
   --repo-path <dir>      Local node dir for proofs.log and HMAC keys
   --keys <path>          HMAC key map
-  --ref <branch>         agent.yaml branch (default: main)
+  --ref <branch>         CREAMLON.md branch (default: main)
   --once                 Poll once and exit (default)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
   --pretty               Pretty-print JSON`,
   deliver: `creamlon deliver <owner/repo> <issue-number> [options]
 
 Options:
-  --output-file <path>   Hash deliverable file for output_hash (required)
+  --output-file <path>   Hash deliverable file for output_digest (required)
   --repo-path <dir>      Local node dir (default: .)
   --keys <path>          HMAC key map
   --key <path>           Private key (default: <repo-path>/.creamlon/private.key)
-  --ref <branch>         agent.yaml branch (default: main)
+  --ref <branch>         CREAMLON.md branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
   --dry-run              Print proof only; no GitHub or file writes
   --resume               Resume a partially completed delivery
@@ -200,19 +201,19 @@ Options:
   --reason <text>        Rejection reason (default: validation errors joined)
   --repo-path <dir>      Local node dir for proofs.log and HMAC keys
   --keys <path>          HMAC key map
-  --ref <branch>         agent.yaml branch (default: main)
+  --ref <branch>         CREAMLON.md branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
   --pretty               Pretty-print JSON`,
   fetchProof: `creamlon fetch-proof <owner/repo> <issue-number> [options]
 
 Options:
-  --verify               Verify proof signature against agent.yaml public_key
-  --ref <branch>         agent.yaml branch (default: main)
+  --verify               Verify proof signature against the manifest identity
+  --ref <branch>         CREAMLON.md branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN)
   --pretty               Pretty-print JSON`,
   audit: `creamlon audit [--repo-path <dir>] [--pretty]
 
-Validate local agent.yaml and every proof in trust/proofs.log. Reports malformed, invalid, and duplicate entries.`,
+Validate local CREAMLON.md and every proof in trust/proofs.log.`,
   status: `creamlon status [--repo-path <dir>] [--status-out <path>] [--pretty]
 
 Audit the node and write trust/status.json for discovery. The output path defaults to <repo-path>/trust/status.json.`,
@@ -238,14 +239,17 @@ function parseArgs(argv) {
     else if (arg === '--file') { i += 1; opts.file = argv[i]; }
     else if (arg === '--request-id') { i += 1; opts.requestId = argv[i]; }
     else if (arg === '--capability-id') { i += 1; opts.capabilityId = argv[i]; }
-    else if (arg === '--input-hash') { i += 1; opts.inputHash = argv[i]; }
-    else if (arg === '--output-hash') { i += 1; opts.outputHash = argv[i]; }
+    else if (arg === '--input-digest') { i += 1; opts.inputDigest = argv[i]; }
+    else if (arg === '--output-digest') { i += 1; opts.outputDigest = argv[i]; }
     else if (arg === '--input') { i += 1; opts.input = argv[i]; }
-    else if (arg === '--input-ref-url') { i += 1; opts.inputRefUrl = argv[i]; }
+    else if (arg === '--input-url') { i += 1; opts.inputUrl = argv[i]; }
+    else if (arg === '--media-type') { i += 1; opts.mediaType = argv[i]; }
     else if (arg === '--requester') { i += 1; opts.requester = argv[i]; }
     else if (arg === '--expires') { i += 1; opts.expires = argv[i]; }
-    else if (arg === '--payment-key-id' || arg === '--key-id') { i += 1; opts.paymentKeyId = argv[i]; }
-    else if (arg === '--payment-expires') { i += 1; opts.paymentExpires = argv[i]; }
+    else if (arg === '--authorization-key-id' || arg === '--key-id') {
+      i += 1; opts.authorizationKeyId = argv[i];
+    }
+    else if (arg === '--authorization-expires') { i += 1; opts.authorizationExpires = argv[i]; }
     else if (arg === '--keys') { i += 1; opts.keys = argv[i]; }
     else if (arg === '--reason') { i += 1; opts.reason = argv[i]; }
     else if (arg === '--verify') opts.verify = true;
@@ -295,19 +299,19 @@ function resolveToken(opts) {
   return getGithubToken(opts.token);
 }
 
-async function loadAgentContext(slug, ref) {
+async function loadManifestContext(slug, ref) {
   const { owner, repo } = parseRepoSlug(slug);
-  const { parsed } = await fetchAgentYaml(owner, repo, ref || 'main');
-  const agentErrors = validateAgentYaml(parsed);
-  if (agentErrors.length) {
-    fail(`invalid agent.yaml: ${agentErrors.join('; ')}`);
+  const { parsed } = await fetchManifest(owner, repo, ref || 'main');
+  const manifestErrors = validateManifest(parsed, { requireGithubProfile: true });
+  if (manifestErrors.length) {
+    fail(`invalid CREAMLON.md: ${manifestErrors.join('; ')}`);
   }
   return { owner, repo, parsed };
 }
 
-async function loadPaymentSecrets(opts) {
+async function loadAuthorizationSecrets(opts) {
   const repoPath = resolve(opts.repoPath || '.');
-  const hmacKeys = await loadHmacKeys(opts.keys || join(repoPath, '.creamlon', 'payment.keys.json'));
+  const hmacKeys = await loadHmacKeys(opts.keys || join(repoPath, '.creamlon', 'authorization.keys.json'));
   return { hmacKeys };
 }
 
@@ -316,7 +320,7 @@ async function cmdKeygen(opts) {
   const result = await generateKeyPair(outDir);
   console.log(`Keys written to ${outDir}/`);
   console.log(`public_key (base64url): ${result.publicKeyBase64Url}`);
-  console.log('Keep private.key secret; add public_key to agent.yaml');
+  console.log('Keep private.key secret; add public_key to CREAMLON.md');
 }
 
 async function cmdHash(positional, opts) {
@@ -332,18 +336,18 @@ async function cmdHash(positional, opts) {
 
 async function cmdSign(opts) {
   const keyPath = opts.key || '.creamlon/private.key';
-  const required = ['requestId', 'capabilityId', 'inputHash', 'outputHash'];
+  const required = ['requestId', 'capabilityId', 'inputDigest', 'outputDigest'];
   for (const k of required) {
     if (!opts[k]) throw usageError(`sign requires --${k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)}`);
   }
-  assertValidHashDigest(opts.inputHash, 'input_hash');
-  assertValidHashDigest(opts.outputHash, 'output_hash');
+  assertValidHashDigest(opts.inputDigest, 'input_digest');
+  assertValidHashDigest(opts.outputDigest, 'output_digest');
   const privateKey = await readPrivateKeyFile(keyPath);
   const fields = buildProofFields({
     requestId: opts.requestId,
     capabilityId: opts.capabilityId,
-    inputHash: opts.inputHash,
-    outputHash: opts.outputHash,
+    inputDigest: opts.inputDigest,
+    outputDigest: opts.outputDigest,
     completedAt: opts.completedAt,
   });
   const proof = signProof(fields, privateKey);
@@ -363,9 +367,11 @@ async function cmdVerify(opts) {
   let continuity = null;
   if (opts.repo) {
     const { owner, repo } = parseRepoSlug(opts.repo);
-    const { parsed } = await fetchAgentYaml(owner, repo, opts.ref || 'main');
-    publicKeyB64 = parsed.creamlon?.public_key;
-    if (!publicKeyB64) fail('agent.yaml has no creamlon.public_key');
+    const { parsed } = await fetchManifest(owner, repo, opts.ref || 'main');
+    const manifestErrors = validateManifest(parsed, { requireGithubProfile: true });
+    if (manifestErrors.length) fail(`invalid CREAMLON.md: ${manifestErrors.join('; ')}`);
+    publicKeyB64 = parsed.identity?.public_key;
+    if (!publicKeyB64) fail('CREAMLON.md has no identity.public_key');
     const token = resolveToken(opts);
     if (token) {
       const rotationsText = await getRepositoryFile(
@@ -404,19 +410,19 @@ async function cmdInspect(positional, opts) {
   const slug = positional[1];
   if (!slug) throw usageError('inspect requires <owner/repo>');
   const { owner, repo } = parseRepoSlug(slug);
-  const { parsed, url } = await fetchAgentYaml(owner, repo, opts.ref || 'main');
-  const errors = validateAgentYaml(parsed);
+  const { parsed, url } = await fetchManifest(owner, repo, opts.ref || 'main');
+  const errors = validateManifest(parsed, { requireGithubProfile: true });
   const out = {
     repo: `${owner}/${repo}`,
     url,
     name: parsed.name,
     description: parsed.description,
-    creamlon: parsed.creamlon,
+    manifest: parsed,
     public_key_fingerprint: null,
     valid: errors.length === 0,
     errors,
   };
-  if (out.valid) out.public_key_fingerprint = publicKeyFingerprint(parsed.creamlon.public_key);
+  if (out.valid) out.public_key_fingerprint = publicKeyFingerprint(parsed.identity.public_key);
   printJson(out, opts.pretty);
 }
 
@@ -442,7 +448,7 @@ async function cmdDiscover(positional, opts) {
   const token = resolveToken(opts);
   const cachePath = resolve('.creamlon', 'cache', 'discovery.json');
   const cacheKey = JSON.stringify({
-    schema: 2,
+    schema: 3,
     capabilityId,
     inputType: opts.inputType || null,
     outputType: opts.outputType || null,
@@ -482,45 +488,54 @@ async function cmdSubmit(positional, opts) {
   if (!opts.requester) throw usageError('submit requires --requester');
 
   const token = resolveToken(opts);
-  const { owner, repo, parsed } = await loadAgentContext(slug, opts.ref);
-  const capIds = parsed.creamlon?.capabilities?.map((c) => c.id) || [];
+  const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
+  const capIds = parsed.capabilities.map((capability) => capability.id);
   const task = {
+    version: '1',
     request_id: opts.requestId || randomUUID(),
     capability_id: opts.capabilityId,
     requester: opts.requester,
     expires: opts.expires || null,
-    payment: null,
-    input: null,
-    input_hash: null,
-    input_ref: null,
+    authorization: null,
+    input: {
+      media_type: opts.mediaType || null,
+      value: null,
+      url: null,
+      digest: null,
+    },
   };
 
-  const inputModes = [opts.input, opts.inputHash, opts.inputRefUrl].filter((v) => v != null);
-  if (inputModes.length === 0) throw usageError('submit requires --input, --input-hash, or --input-ref-url');
+  if (!opts.mediaType) throw usageError('submit requires --media-type');
+  const inputModes = [opts.input, opts.inputDigest, opts.inputUrl].filter((value) => value != null);
+  if (inputModes.length === 0) throw usageError('submit requires --input, --input-digest, or --input-url');
   if (inputModes.length > 1) throw usageError('submit: only one input mode allowed');
 
-  if (opts.input) task.input = opts.input;
-  if (opts.inputHash) task.input_hash = opts.inputHash;
-  if (opts.inputRefUrl) task.input_ref = { type: 'url', value: opts.inputRefUrl };
+  if (opts.input != null) task.input.value = opts.input;
+  if (opts.inputDigest) task.input.digest = opts.inputDigest;
+  if (opts.inputUrl) task.input.url = opts.inputUrl;
 
-  if (!opts.paymentKeyId) throw usageError('submit requires --payment-key-id');
-  if (!opts.paymentExpires) throw usageError('submit requires --payment-expires');
-  if (!opts.keys) throw usageError('submit requires --keys');
-  const keys = await loadHmacKeys(opts.keys);
-  const secret = keys.get(opts.paymentKeyId);
-  if (!secret) throw usageError(`no payment secret configured for key_id: ${opts.paymentKeyId}`);
-  task.payment = signHmacPayment(task, {
-    keyId: opts.paymentKeyId,
-    secret,
-    expires: opts.paymentExpires,
-  });
+  const authorizationRequired = !!parsed.profiles?.authorization;
+  if (authorizationRequired) {
+    if (!opts.authorizationKeyId) throw usageError('submit requires --authorization-key-id');
+    if (!opts.authorizationExpires) throw usageError('submit requires --authorization-expires');
+    if (!opts.keys) throw usageError('submit requires --keys');
+    const keys = await loadHmacKeys(opts.keys);
+    const secret = keys.get(opts.authorizationKeyId);
+    if (!secret) throw usageError(`no authorization secret configured for key_id: ${opts.authorizationKeyId}`);
+    task.authorization = signHmacAuthorization(task, {
+      keyId: opts.authorizationKeyId,
+      secret,
+      expires: opts.authorizationExpires,
+    });
+  }
 
-  const errors = validateTaskYaml(task, {
+  const errors = validateTask(task, {
     capability_ids: capIds,
+    authorization_required: authorizationRequired,
   });
   if (errors.length) fail(`invalid task: ${errors.join('; ')}`);
 
-  const body = serializeTaskYaml(task);
+  const body = serializeTask(task);
   const title = taskIssueTitle(task.capability_id);
   const issue = await createIssue(owner, repo, title, body, token);
 
@@ -539,8 +554,8 @@ async function cmdWatch(positional, opts) {
   if (!slug) throw usageError('watch requires <owner/repo>');
 
   const token = resolveToken(opts);
-  const { owner, repo, parsed } = await loadAgentContext(slug, opts.ref);
-  const paymentSecrets = await loadPaymentSecrets(opts);
+  const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
+  const authorizationSecrets = await loadAuthorizationSecrets(opts);
 
   let processed = new Set();
   if (opts.repoPath) {
@@ -554,11 +569,11 @@ async function cmdWatch(positional, opts) {
   const results = [];
   for (const issue of taskIssues) {
     try {
-      const task = parseTaskYaml(issue.body || '');
+      const task = parseTask(issue.body || '');
       const acceptance = validateTaskAcceptance(task, issue, {
-        agentParsed: parsed,
+        manifest: parsed,
         processedIds: processed,
-        paymentSecrets,
+        authorizationSecrets,
         checkIssueMeta: true,
       });
 
@@ -571,8 +586,8 @@ async function cmdWatch(positional, opts) {
         requester: task.requester,
         valid: acceptance.errors.length === 0,
         errors: acceptance.errors,
-        payment_ok: acceptance.payment_ok,
-        payment_error: acceptance.payment_error,
+        authorization_ok: acceptance.authorization_ok,
+        authorization_error: acceptance.authorization_error,
       });
     } catch (error) {
       results.push({
@@ -584,8 +599,8 @@ async function cmdWatch(positional, opts) {
         requester: null,
         valid: false,
         errors: [error.message],
-        payment_ok: false,
-        payment_error: null,
+        authorization_ok: false,
+        authorization_error: null,
       });
     }
   }
@@ -616,28 +631,28 @@ async function cmdDeliver(positional, opts) {
   const releaseLock = opts.dryRun ? null : await acquireDeliveryLock(lockPath);
 
   try {
-    const { owner, repo, parsed } = await loadAgentContext(slug, opts.ref);
-    const paymentSecrets = await loadPaymentSecrets(opts);
+    const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
+    const authorizationSecrets = await loadAuthorizationSecrets(opts);
     const issue = await getIssue(owner, repo, issueNumber, token);
-    const task = parseTaskYaml(issue.body || '');
+    const task = parseTask(issue.body || '');
     const existingState = await readDeliveryState(statePath);
     if (opts.resume && !existingState) fail('no delivery state to resume', 4);
 
     const processed = await loadProcessedIds(proofsPath);
     const acceptance = validateTaskAcceptance(task, issue, {
-      agentParsed: parsed,
+      manifest: parsed,
       processedIds: existingState ? null : processed,
-      paymentSecrets,
+      authorizationSecrets,
       checkIssueMeta: !existingState,
     });
     if (acceptance.errors.length) fail(`cannot deliver: ${acceptance.errors.join('; ')}`);
 
-    const inputHash = resolveInputHash(task);
-    const outputHash = await hashFile(opts.outputFile);
+    const inputDigest = resolveInputDigest(task);
+    const outputDigest = await hashFile(opts.outputFile);
     let proof = existingState?.proof || null;
     if (proof) {
-      const binding = verifyProofBinding(proof, task, inputHash);
-      if (!binding.ok || proof.output_hash !== outputHash) {
+      const binding = verifyProofBinding(proof, task, inputDigest);
+      if (!binding.ok || proof.output_digest !== outputDigest) {
         fail('stored delivery state conflicts with task or output', 4);
       }
     } else {
@@ -645,8 +660,8 @@ async function cmdDeliver(positional, opts) {
       proof = signProof(buildProofFields({
         requestId: task.request_id,
         capabilityId: task.capability_id,
-        inputHash,
-        outputHash,
+        inputDigest,
+        outputDigest,
         completedAt: opts.completedAt,
       }), privateKey);
     }
@@ -667,7 +682,7 @@ async function cmdDeliver(positional, opts) {
 
     if (state.status === 'prepared') {
       const comments = await getIssueComments(owner, repo, issueNumber, token);
-      const remote = extractBoundProofFromComments(comments, task, inputHash);
+      const remote = extractBoundProofFromComments(comments, task, inputDigest);
       if (remote.proof && !sameProof(remote.proof, proof)) {
         fail('issue already contains a conflicting valid proof', 4);
       }
@@ -737,17 +752,17 @@ async function cmdReject(positional, opts) {
   const repoPath = resolve(opts.repoPath || '.');
   const proofsPath = join(repoPath, 'trust', 'proofs.log');
 
-  const { owner, repo, parsed } = await loadAgentContext(slug, opts.ref);
-  const paymentSecrets = await loadPaymentSecrets(opts);
+  const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
+  const authorizationSecrets = await loadAuthorizationSecrets(opts);
 
   const issue = await getIssue(owner, repo, issueNumber, token);
-  const task = parseTaskYaml(issue.body || '');
+  const task = parseTask(issue.body || '');
 
   const processed = await loadProcessedIds(proofsPath);
   const acceptance = validateTaskAcceptance(task, issue, {
-    agentParsed: parsed,
+    manifest: parsed,
     processedIds: processed,
-    paymentSecrets,
+    authorizationSecrets,
     checkIssueMeta: true,
   });
 
@@ -772,29 +787,30 @@ async function cmdFetchProof(positional, opts) {
   if (!/^[1-9]\d*$/.test(issueNumber)) throw usageError('fetch-proof issue number must be a positive integer');
 
   const token = resolveToken(opts);
-  const { owner, repo, parsed } = await loadAgentContext(slug, opts.ref);
+  const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
 
   const [issue, comments] = await Promise.all([
     getIssue(owner, repo, issueNumber, token),
     getIssueComments(owner, repo, issueNumber, token),
   ]);
-  const task = parseTaskYaml(issue.body || '');
-  const taskErrors = validateTaskYaml(task, {
-    capability_ids: parsed.creamlon?.capabilities?.map((cap) => cap.id) || [],
+  const task = parseTask(issue.body || '');
+  const taskErrors = validateTask(task, {
+    capability_ids: parsed.capabilities.map((capability) => capability.id),
+    authorization_required: !!parsed.profiles?.authorization,
   });
   if (taskErrors.length) fail(`invalid issue task: ${taskErrors.join('; ')}`);
   if (issue.title !== taskIssueTitle(task.capability_id)) {
     fail('issue title capability does not match task capability_id');
   }
-  const inputHash = resolveInputHash(task);
-  const extracted = extractBoundProofFromComments(comments, task, inputHash);
+  const inputDigest = resolveInputDigest(task);
+  const extracted = extractBoundProofFromComments(comments, task, inputDigest);
   const proof = extracted.proof;
 
   const out = {
     ok: !!proof,
     issue_number: Number(issueNumber),
     proof,
-    binding: proof ? verifyProofBinding(proof, task, inputHash) : { ok: false, errors: extracted.errors },
+    binding: proof ? verifyProofBinding(proof, task, inputDigest) : { ok: false, errors: extracted.errors },
     author_trusted: !!extracted.comment,
   };
 
@@ -804,8 +820,8 @@ async function cmdFetchProof(positional, opts) {
   }
 
   if (opts.verify) {
-    const currentPublicKey = parsed.creamlon?.public_key;
-    if (!currentPublicKey) fail('agent.yaml has no creamlon.public_key');
+    const currentPublicKey = parsed.identity?.public_key;
+    if (!currentPublicKey) fail('CREAMLON.md has no identity.public_key');
     const rotationsText = await getRepositoryFile(
       owner,
       repo,
@@ -834,15 +850,15 @@ async function cmdFetchProof(positional, opts) {
 }
 
 async function auditRepository(repoPath) {
-  const parsedAgent = parseAgentYaml(await readFile(join(repoPath, 'agent.yaml'), 'utf8'));
-  const agentErrors = validateAgentYaml(parsedAgent);
+  const manifest = parseManifest(await readFile(join(repoPath, 'CREAMLON.md'), 'utf8'));
+  const manifestErrors = validateManifest(manifest, { requireGithubProfile: true });
   const rotationsText = await readFile(join(repoPath, 'trust', 'key-rotations.log'), 'utf8').catch((error) => {
     if (error.code === 'ENOENT') return '';
     throw error;
   });
-  const continuity = agentErrors.length === 0
-    ? inspectKeyContinuity(rotationsText, parsedAgent.creamlon.public_key)
-    : { status: 'broken', errors: ['invalid agent.yaml'], history: [] };
+  const continuity = manifestErrors.length === 0
+    ? inspectKeyContinuity(rotationsText, manifest.identity.public_key)
+    : { status: 'broken', errors: ['invalid CREAMLON.md'], history: [] };
   const logText = await readFile(join(repoPath, 'trust', 'proofs.log'), 'utf8').catch((error) => {
     if (error.code === 'ENOENT') return '';
     throw error;
@@ -868,12 +884,12 @@ async function auditRepository(repoPath) {
       entries.push({ line: lineNumber, verify: { ok: false, reason: error.message }, duplicate: null });
     }
   }
-  const ok = agentErrors.length === 0
+  const ok = manifestErrors.length === 0
     && continuity.status !== 'broken'
     && entries.every((entry) => entry.verify.ok && entry.duplicate == null);
   return {
     ok,
-    agent_errors: agentErrors,
+    manifest_errors: manifestErrors,
     key_continuity: continuity.status,
     key_errors: continuity.errors,
     proof_count: entries.length,
@@ -889,11 +905,11 @@ async function cmdAudit(opts) {
 
 async function cmdStatus(opts) {
   const repoPath = resolve(opts.repoPath || '.');
-  const parsedAgent = parseAgentYaml(await readFile(join(repoPath, 'agent.yaml'), 'utf8'));
+  const manifest = parseManifest(await readFile(join(repoPath, 'CREAMLON.md'), 'utf8'));
   const result = await auditRepository(repoPath);
   const status = {
-    v: parsedAgent.creamlon?.version || null,
-    status: parsedAgent.creamlon?.status || null,
+    version: manifest.version,
+    status: manifest.status,
     checked_at: new Date().toISOString(),
     proofs_valid: result.ok,
   };
@@ -919,11 +935,11 @@ async function cmdKeyRotate(opts) {
   if (signingPublicKey !== opts.oldPublicKey) {
     fail('private key does not match --old-public-key');
   }
-  const parsedAgent = parseAgentYaml(await readFile(join(repoPath, 'agent.yaml'), 'utf8'));
-  const agentErrors = validateAgentYaml(parsedAgent);
-  if (agentErrors.length) fail(`invalid agent.yaml: ${agentErrors.join('; ')}`);
-  if (parsedAgent.creamlon.public_key !== opts.newPublicKey) {
-    fail('--new-public-key must match agent.yaml creamlon.public_key');
+  const manifest = parseManifest(await readFile(join(repoPath, 'CREAMLON.md'), 'utf8'));
+  const manifestErrors = validateManifest(manifest, { requireGithubProfile: true });
+  if (manifestErrors.length) fail(`invalid CREAMLON.md: ${manifestErrors.join('; ')}`);
+  if (manifest.identity.public_key !== opts.newPublicKey) {
+    fail('--new-public-key must match CREAMLON.md identity.public_key');
   }
   const logPath = join(repoPath, 'trust', 'key-rotations.log');
   const existingText = await readFile(logPath, 'utf8').catch((error) => {
@@ -949,20 +965,22 @@ async function cmdKeyRotate(opts) {
   printJson({ ...rotation, path: logPath }, opts.pretty);
 }
 
-async function cmdPaymentKeyNew(opts) {
-  if (!opts.paymentKeyId) throw usageError('payment-key-new requires --key-id');
-  const outPath = resolve(opts.out || '.creamlon/payment.keys.json');
+async function cmdHmacKeyNew(opts) {
+  if (!opts.authorizationKeyId) throw usageError('hmac-key-new requires --key-id');
+  const outPath = resolve(opts.out || '.creamlon/authorization.keys.json');
   let keys = {};
   try {
     keys = JSON.parse(await readFile(outPath, 'utf8'));
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
-  if (keys[opts.paymentKeyId]) fail(`payment key already exists: ${opts.paymentKeyId}`, 4);
-  keys[opts.paymentKeyId] = generateHmacSecret(randomBytes(32));
+  if (keys[opts.authorizationKeyId]) {
+    fail(`authorization key already exists: ${opts.authorizationKeyId}`, 4);
+  }
+  keys[opts.authorizationKeyId] = generateHmacSecret(randomBytes(32));
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, `${JSON.stringify(keys, null, 2)}\n`, { flag: 'w', mode: 0o600 });
-  console.log(`HMAC payment key written to ${outPath}`);
+  console.log(`HMAC authorization key written to ${outPath}`);
 }
 
 async function copyTemplate(src, dest, name) {
@@ -998,8 +1016,7 @@ async function cmdInit(positional, opts) {
   await copyTemplate(TEMPLATE_DIR, dest, name);
   console.log(`Created agent node at ${dest}`);
   console.log(`Next: creamlon keygen --out ${join(dest, '.creamlon')}`);
-  console.log(`Next: creamlon payment-key-new --key-id customer-1 --out ${join(dest, '.creamlon', 'payment.keys.json')}`);
-  console.log('Then paste public_key into agent.yaml and push to GitHub.');
+  console.log('Then paste public_key into CREAMLON.md and push to GitHub.');
 }
 
 async function readStdin() {
@@ -1014,7 +1031,7 @@ export async function runCli(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '-h' || cmd === '--help') {
     const topic = rest[0];
-    const helpKey = topic === 'payment-key-new' ? 'paymentKeyNew'
+    const helpKey = topic === 'hmac-key-new' ? 'hmacKeyNew'
       : topic === 'fetch-proof' ? 'fetchProof'
         : topic === 'key-rotate' ? 'keyRotate' : topic;
     console.log(helpKey && HELP[helpKey] ? HELP[helpKey] : HELP.main);
@@ -1031,8 +1048,8 @@ export async function runCli(argv) {
     case 'key-rotate':
       await cmdKeyRotate(opts);
       break;
-    case 'payment-key-new':
-      await cmdPaymentKeyNew(opts);
+    case 'hmac-key-new':
+      await cmdHmacKeyNew(opts);
       break;
     case 'hash':
       await cmdHash(positional, opts);
