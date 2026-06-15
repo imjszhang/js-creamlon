@@ -53,6 +53,44 @@ test('HMAC authorization rejects expired credential', () => {
   assert.match(result.reason, /expired/);
 });
 
+test('HMAC authorization binds the immutable delivery commit', () => {
+  const task = {
+    version: '1',
+    request_id: 'req-delivery-hmac',
+    capability_id: 'echo',
+    input: { media_type: 'application/octet-stream', digest: hashText('input') },
+    extensions: {
+      delivery: {
+        scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+        transport: 'github-private-repo',
+        ephemeral_public_key: 'A'.repeat(43),
+        github: {
+          repo: 'github:alice/inbox',
+          ref: 'main',
+          input_path: 'tasks/req-delivery-hmac/input.enc',
+          input_commit: 'a'.repeat(40),
+          output_path: 'tasks/req-delivery-hmac/output.enc',
+        },
+      },
+    },
+  };
+  const authorization = signHmacAuthorization(task, {
+    keyId: 'customer-1',
+    secret: 'secret',
+    expires: '2099-01-01T00:00:00Z',
+  });
+  const tampered = structuredClone(task);
+  tampered.extensions.delivery.github.input_commit = 'b'.repeat(40);
+  assert.equal(
+    verifyHmacAuthorization(
+      tampered,
+      authorization,
+      new Map([['customer-1', 'secret']]),
+    ).ok,
+    false,
+  );
+});
+
 test('loadHmacKeys reads the private key file', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-keys-'));
   try {

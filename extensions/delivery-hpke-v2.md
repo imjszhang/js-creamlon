@@ -17,7 +17,6 @@ must use the raw 32-byte X25519 public keys inside the RFC 9180 KEM context.
 
 ## Non-goals
 
-- Does not change Ed25519 proof fields
 - Does not embed artifact bytes in Issues
 - Does not provide object-storage credentials (callers supply presigned URLs)
 
@@ -101,15 +100,18 @@ extensions:
       repo: github:alice/caller-deliveries
       ref: main
       input_path: inbox/{request_id}/input.enc
+      input_commit: 0123456789abcdef0123456789abcdef01234567
       output_path: inbox/{request_id}/output.enc
 ```
 
 The caller repository is private. The node GitHub token needs read access to
-input and write access to output paths.
+input and write access to output paths. `input_commit` is required and pins
+input reads to the immutable commit created by `send-input`; nodes must not
+read input from the moving branch head.
 
 This is the default GitHub-profile transport. Use one private inbox repository
-per node operator so repository write access does not allow one operator to
-overwrite another operator's encrypted task files.
+per node repository. Multiple capabilities and requests for that node share the
+repository but use request-scoped paths and immutable input commits.
 
 ### Caller inbox registry
 
@@ -136,6 +138,7 @@ Initialize and authorize a node:
 ```bash
 creamlon caller inbox init --node bob/echo-node
 creamlon caller inbox grant --node bob/echo-node
+creamlon caller inbox protect --node bob/echo-node
 creamlon caller inbox check --node bob/echo-node
 ```
 
@@ -167,12 +170,14 @@ Trust levels have local caller semantics:
 | Trust | Behavior |
 | --- | --- |
 | `trusted` | Standing per-node inbox access is allowed |
-| `trial` | Access is allowed but callers should review and revoke it after use |
+| `trial` | GitHub delivery requires explicit `--allow-trial-inbox`; prefer presigned storage |
 | `blocked` | `grant` and registry-backed `prepare` are rejected |
 
 A single inbox with node-specific paths is an operational layout only. GitHub
 repository permissions are repository-wide, so paths do not isolate mutually
-untrusted operators.
+untrusted operators. `caller inbox protect` blocks force-push and branch
+deletion when the caller's GitHub plan supports protected private branches.
+`check` reports transport readiness and branch hardening separately.
 
 ## Local outbox
 
@@ -199,19 +204,22 @@ Never commit outbox files or print private keys in logs.
 
 ### Caller agent
 
-1. `extension delivery prepare` — generate task keys and extensions JSON
-2. `extension delivery send-input` — encrypt input to node public key and upload
-3. `submit --extensions-file ... --input-digest ...`
-4. After Issue closes: `fetch-proof --verify`
-5. `extension delivery fetch-output` — decrypt and verify `proof.output_digest`
+1. `extension delivery prepare` — generate task keys, draft extensions, and outbox
+2. `extension delivery draft` — create the single local task YAML
+3. `extension delivery send-input --task-file ... --extensions-file ... --outbox ...`
+   — upload input and write the immutable `input_commit` into all local state
+4. `submit --task-file ...` — submit that same updated task
+5. After Issue closes: `fetch-proof --verify`
+6. `extension delivery fetch-output` — decrypt and verify `proof.output_digest`
 
 ### Node agent
 
 1. `watch` — validate task
 2. `extension delivery fetch-input` — decrypt and verify `task.input.digest`
 3. Execute capability locally
-4. `deliver --output-file ...` — sign plaintext digest
-5. `extension delivery send-output` — encrypt output to caller task public key
+4. `extension delivery send-output` — encrypt output and record its digest receipt
+5. `deliver --output-file ...` — verify the receipt, sign the plaintext digest,
+   publish proof, and close the Issue
 
 ## Verification
 
@@ -219,7 +227,8 @@ Never commit outbox files or print private keys in logs.
 | --- | --- |
 | Input | `sha256(decrypted input) == task.input.digest` |
 | Output | `sha256(decrypted output) == proof.output_digest` |
-| Core | `fetch-proof --verify` signature and task binding |
+| Revision | GitHub input is read from `delivery.github.input_commit` |
+| Core | Proof signs `delivery_intent_digest` and task input/output binding |
 
 ## Cross-account operation
 
@@ -253,7 +262,9 @@ where collaborator access cannot be established, or deployments that reject
 standing cross-repository permissions. Its GET URLs remain outside the public
 Issue and should be delivered through a private channel.
 
-The current delivery object binds one input digest and one output digest.
+The current delivery object binds one input digest, one immutable input
+revision, and one output digest. HMAC authorization, credential intent, and
+Ed25519 delivery proof include a digest of the delivery transport metadata.
 Different artifact kinds are represented by capability media types. Multiple
 output artifacts require a future extension and are not implied by the inbox
 registry.

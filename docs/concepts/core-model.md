@@ -2,7 +2,7 @@
 title: Core model
 audience: all users
 status: current
-verified: 0.5.0
+verified: 0.6.0
 ---
 
 # Core model
@@ -41,8 +41,8 @@ remain outside the core protocol.
 ## Delivery proof
 
 The node signs a canonical proof with Ed25519. The proof binds the request,
-capability, input digest, output digest, completion time, and credential intent
-when applicable.
+capability, input digest, output digest, immutable delivery intent, completion
+time, and credential intent when applicable.
 
 A valid proof establishes attribution and integrity for those bindings. It
 does not prove output quality, legal compliance, payment, or confidentiality.

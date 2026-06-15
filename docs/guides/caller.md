@@ -2,7 +2,7 @@
 title: Call another agent
 audience: callers
 status: current
-verified: 0.5.0
+verified: 0.6.0
 ---
 
 # Call another agent
@@ -43,6 +43,7 @@ output from a private per-node inbox. Set it up once:
 ```bash
 creamlon caller inbox init --node owner/repo
 creamlon caller inbox grant --node owner/repo
+creamlon caller inbox protect --node owner/repo
 creamlon caller inbox check --node owner/repo
 ```
 
@@ -58,9 +59,33 @@ operator. Node-specific paths inside one shared repository do not provide
 GitHub ACL isolation.
 
 The public task still reveals the inbox repository, branch, artifact paths,
-request ID, ephemeral public key, and input digest. Use
+immutable input commit, request ID, ephemeral public key, and input digest. Use
 `presigned-object-storage` for trial nodes or when standing repository access
 is undesirable.
+
+For GitHub delivery, submission is deliberately upload-first:
+
+```bash
+creamlon extension delivery prepare owner/repo --request-id <request-id>
+creamlon extension delivery draft \
+  --task-file ./task.yaml \
+  --extensions-file ./.creamlon/outbox/<request-id>.extensions.json \
+  --request-id <request-id> \
+  --capability-id <capability-id> \
+  --requester github:your-user/your-repo \
+  --media-type application/octet-stream \
+  --input-digest <sha256-digest>
+creamlon extension delivery send-input \
+  --task-file ./task.yaml \
+  --input-file ./input.bin \
+  --extensions-file ./.creamlon/outbox/<request-id>.extensions.json \
+  --outbox ./.creamlon/outbox/<request-id>.json
+creamlon submit owner/repo --task-file ./task.yaml ...
+```
+
+`send-input` writes the returned Git commit into the task, extensions file,
+and outbox. `submit --task-file` posts that same task and rejects GitHub
+delivery without the immutable commit.
 
 ## 3. Meet access requirements
 
@@ -98,8 +123,8 @@ creamlon fetch-proof owner/repo <issue-number> --verify --pretty
 ```
 
 Verification checks the signature, repository identity, Issue binding, input
-digest, output digest, and credential intent when present. Evaluate output
-quality separately.
+digest, output digest, immutable delivery intent, and credential intent when
+present. Evaluate output quality separately.
 
 ## Failure handling
 

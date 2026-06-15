@@ -26,7 +26,9 @@ test('github transport uploads and fetches encrypted artifacts', async () => {
     outboxDir: await mkdtemp(join(tmpdir(), 'creamlon-outbox-')),
   });
   const files = new Map();
+  const snapshots = new Map();
   const putBranches = [];
+  let commitCounter = 0;
   const response = (ok, status, data) => ({
     ok,
     status,
@@ -37,11 +39,19 @@ test('github transport uploads and fetches encrypted artifacts', async () => {
     if (path.includes('/contents/') && init.method === 'PUT') {
       const body = JSON.parse(init.body);
       putBranches.push(body.branch);
-      files.set(contentPath, Buffer.from(body.content, 'base64'));
-      return response(true, 200, { content: { sha: 'sha-1' } });
+      const bytes = Buffer.from(body.content, 'base64');
+      files.set(contentPath, bytes);
+      commitCounter += 1;
+      const commitSha = String(commitCounter).padStart(40, 'a');
+      snapshots.set(`${commitSha}:${contentPath}`, bytes);
+      return response(true, 200, {
+        content: { sha: `content-${commitCounter}` },
+        commit: { sha: commitSha },
+      });
     }
     if (path.includes('/contents/')) {
-      const stored = files.get(contentPath);
+      const ref = new URL(path, 'https://api.github.test').searchParams.get('ref');
+      const stored = snapshots.get(`${ref}:${contentPath}`) || files.get(contentPath);
       if (!stored) {
         return response(false, 404, { message: 'not found' });
       }
@@ -65,12 +75,17 @@ test('github transport uploads and fetches encrypted artifacts', async () => {
   };
   const inputFile = join(tmpdir(), 'gh-input.bin');
   await writeFile(inputFile, input);
-  await sendInput({
+  const sentInput = await sendInput({
     task,
     manifest: { extensions: { delivery: { receive_public_key: nodeKeys.public_key } } },
     inputFile,
     token: 'test-token',
   });
+  task.extensions.delivery.github.input_commit = sentInput.input_commit;
+  const outbox = JSON.parse(await readFile(prepared.outbox_path, 'utf8'));
+  outbox.github.input_commit = sentInput.input_commit;
+  await writeFile(prepared.outbox_path, `${JSON.stringify(outbox)}\n`);
+  assert.match(sentInput.input_commit, /^[a-f0-9]{40}$/);
   const fetchedInput = join(tmpdir(), 'gh-fetched-input.bin');
   await fetchInput({
     task,
@@ -95,6 +110,77 @@ test('github transport uploads and fetches encrypted artifacts', async () => {
   assert.equal(await readFile(fetchedOutput, 'utf8'), outputText);
   assert.deepEqual(putBranches, ['delivery-branch', 'delivery-branch']);
   assert.equal(prepared.extensions.delivery.github.ref, 'delivery-branch');
+});
+
+test('github input fetch is pinned to the upload commit', async () => {
+  const nodeKeys = generateDeliveryKeyPair();
+  const prepared = await prepareDelivery({
+    transport: 'github-private-repo',
+    requestId: 'req-pinned-input',
+    github: {
+      repo: 'github:alice/deliveries',
+      input_path: 'tasks/{request_id}/input.enc',
+      output_path: 'tasks/{request_id}/output.enc',
+      ref: 'main',
+    },
+    outboxDir: await mkdtemp(join(tmpdir(), 'creamlon-outbox-')),
+  });
+  const files = new Map();
+  const snapshots = new Map();
+  const originalCommit = 'a'.repeat(40);
+  setGithubFetch(async (url, init = {}) => {
+    const parsed = new URL(url);
+    const contentPath = decodeURIComponent(parsed.pathname.split('/contents/')[1] || '');
+    if (init.method === 'PUT') {
+      const bytes = Buffer.from(JSON.parse(init.body).content, 'base64');
+      files.set(contentPath, bytes);
+      snapshots.set(`${originalCommit}:${contentPath}`, bytes);
+      return {
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({
+          content: { sha: 'content-sha' },
+          commit: { sha: originalCommit },
+        }),
+      };
+    }
+    const bytes = snapshots.get(`${parsed.searchParams.get('ref')}:${contentPath}`)
+      || files.get(contentPath);
+    return {
+      ok: Boolean(bytes),
+      status: bytes ? 200 : 404,
+      text: async () => JSON.stringify(bytes
+        ? { type: 'file', content: bytes.toString('base64'), encoding: 'base64' }
+        : { message: 'not found' }),
+    };
+  });
+  const input = Buffer.from('immutable input');
+  const task = {
+    version: '1',
+    request_id: prepared.request_id,
+    capability_id: 'echo',
+    requester: 'github:alice/caller',
+    input: { media_type: 'application/octet-stream', digest: hashBuffer(input) },
+    extensions: prepared.extensions,
+  };
+  const inputFile = join(tmpdir(), 'pinned-input.bin');
+  await writeFile(inputFile, input);
+  const sent = await sendInput({
+    task,
+    manifest: { extensions: { delivery: { receive_public_key: nodeKeys.public_key } } },
+    inputFile,
+    token: 'caller-token',
+  });
+  task.extensions.delivery.github.input_commit = sent.input_commit;
+  files.set(task.extensions.delivery.github.input_path, Buffer.from('tampered branch head'));
+  const fetched = join(tmpdir(), 'pinned-input-fetched.bin');
+  await fetchInput({
+    task,
+    outputFile: fetched,
+    nodePrivateKey: nodeKeys.private_key,
+    token: 'node-token',
+  });
+  assert.deepEqual(await readFile(fetched), input);
 });
 
 test('github transport explains cross-account private repository access failures', async () => {

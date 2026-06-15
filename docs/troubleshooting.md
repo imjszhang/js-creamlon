@@ -2,7 +2,7 @@
 title: Troubleshooting
 audience: all users
 status: current
-verified: 0.5.0
+verified: 0.6.0
 ---
 
 # Troubleshooting
@@ -69,6 +69,11 @@ the operator permission is missing, confirm the invitation was accepted and
 that `profiles.github.operator` names a user rather than an organization. Use
 one inbox repository per node; path prefixes in a shared repository do not
 limit collaborator write access.
+
+Run `creamlon caller inbox protect --node owner/repo` to block force-push and
+branch deletion where supported. A valid GitHub task must contain
+`delivery.github.input_commit`; missing revisions indicate that `send-input`
+did not finish writing the task, extensions file, and outbox before submission.
 
 For fine-grained caller tokens, `caller inbox grant` and `revoke` require
 repository Administration write permission. Personal inbox repositories use

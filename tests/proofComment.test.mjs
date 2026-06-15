@@ -9,6 +9,7 @@ import { buildProofFields, signProof, generateKeyPair } from '../lib/proof.mjs';
 import { hashText } from '../lib/hash.mjs';
 import { generateCredential, authorizeCredential, taskIntentDigest } from '../lib/credential.mjs';
 import { parseManifest } from '../lib/manifest.mjs';
+import { deliveryIntentDigest } from '../lib/extensions/delivery/schema.mjs';
 
 test('extractProofFromCommentBody parses deliver comment format', async () => {
   const { privateKey } = await generateKeyPair(null);
@@ -153,4 +154,50 @@ extensions: {}
   );
   assert.equal(rejected.proof, null);
   assert.ok(rejected.errors.some((error) => error.includes('task_intent_digest')));
+});
+
+test('proof binding rejects a changed immutable delivery commit', async () => {
+  const { privateKey } = await generateKeyPair(null);
+  const task = {
+    version: '1',
+    request_id: 'req-delivery-binding',
+    capability_id: 'echo',
+    requester: 'github:a/b',
+    input: { media_type: 'application/octet-stream', digest: hashText('input') },
+    extensions: {
+      delivery: {
+        scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+        transport: 'github-private-repo',
+        ephemeral_public_key: 'A'.repeat(43),
+        github: {
+          repo: 'github:alice/inbox',
+          ref: 'main',
+          input_path: 'tasks/req-delivery-binding/input.enc',
+          input_commit: 'a'.repeat(40),
+          output_path: 'tasks/req-delivery-binding/output.enc',
+        },
+      },
+    },
+  };
+  const proof = signProof(buildProofFields({
+    requestId: task.request_id,
+    capabilityId: task.capability_id,
+    inputDigest: task.input.digest,
+    outputDigest: hashText('output'),
+    deliveryIntentDigest: deliveryIntentDigest(task),
+    completedAt: '2026-06-15T00:00:00.000Z',
+  }), privateKey);
+  const tamperedTask = structuredClone(task);
+  tamperedTask.extensions.delivery.github.input_commit = 'b'.repeat(40);
+  const result = extractBoundProofFromComments(
+    [{
+      id: 5,
+      author_association: 'OWNER',
+      body: `\`\`\`json\n${JSON.stringify(proof)}\n\`\`\``,
+    }],
+    tamperedTask,
+    task.input.digest,
+  );
+  assert.equal(result.proof, null);
+  assert.ok(result.errors.some((error) => error.includes('delivery_intent_digest')));
 });

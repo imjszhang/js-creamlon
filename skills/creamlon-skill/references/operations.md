@@ -14,21 +14,24 @@ Do not publish secrets or private input values in GitHub Issues.
 
 When using `delivery-hpke-v2`:
 
-1. `extension delivery prepare` — create task keys, extensions JSON, and outbox.
-2. `extension delivery send-input` — encrypt and upload input before or after submit.
-3. `submit --extensions-file` with `--input-digest` (compute digests with `creamlon hash --file`, which hashes raw bytes).
-4. `fetch-proof --verify` after the Issue closes.
-5. `extension delivery fetch-output` — decrypt output, verify `proof.output_digest`, and verify Ed25519 proof by default.
+1. `extension delivery prepare` — create task keys, draft extensions, and outbox.
+2. `extension delivery draft` — create the single local task YAML.
+3. `extension delivery send-input --task-file ... --extensions-file ... --outbox ...`
+   — encrypt and upload input and record the immutable GitHub commit.
+4. `submit --task-file ...` to post that same updated task.
+5. `fetch-proof --verify` after the Issue closes.
+6. `extension delivery fetch-output` — decrypt output, verify `proof.output_digest`, and verify Ed25519 proof by default.
 
 Keep `.creamlon/outbox/{request_id}.json` local (mode `0600`). Never commit
 outbox files or print GET URLs, ephemeral private keys, or artifact plaintext.
+Compute digests with `creamlon hash --file`, which hashes raw bytes.
 
 ## One-time task credentials
 
 When a capability requires credential access, the node operator creates:
 
 ```bash
-npx --yes creamlon@0.5.0 credential create \
+npx --yes creamlon@0.6.0 credential create \
   --repo-path . \
   --capability-id <id>
 ```
@@ -47,7 +50,7 @@ Free nodes need no key map. To require HMAC authorization, declare
 `profiles.authorization.scheme: hmac-sha256` and generate a customer key:
 
 ```bash
-npx --yes creamlon@0.5.0 hmac-key-new \
+npx --yes creamlon@0.6.0 hmac-key-new \
   --key-id customer-1 \
   --out .creamlon/authorization.keys.json
 ```

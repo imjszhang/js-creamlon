@@ -54,6 +54,23 @@ test('caller inbox init, grant, check, and revoke manage a per-node repository',
     if (path === '/repos/alice/creamlon-inbox-bob-echo-node/collaborators/bob/permission') {
       return response(200, { permission: 'write' });
     }
+    if (path === '/repos/alice/creamlon-inbox-bob-echo-node/rulesets'
+      && init.method === 'GET') {
+      return response(200, [{
+        id: 7,
+        name: 'Unrelated review policy',
+      }]);
+    }
+    if (path === '/repos/alice/creamlon-inbox-bob-echo-node/rulesets'
+      && init.method === 'POST') {
+      return response(201, { id: 8 });
+    }
+    if (path === '/repos/alice/creamlon-inbox-bob-echo-node/rules/branches/main') {
+      return response(200, [
+        { type: 'deletion' },
+        { type: 'non_fast_forward' },
+      ]);
+    }
     if (path === '/repos/alice/creamlon-inbox-bob-echo-node/collaborators/bob'
       && init.method === 'DELETE') {
       return response(204);
@@ -100,8 +117,19 @@ test('caller inbox init, grant, check, and revoke manage a per-node repository',
   entry = findInbox(await readInboxRegistry(registryPath), base.node);
   assert.equal(entry.grant, 'invitation-pending-push');
 
+  await cmdCaller(['caller', 'inbox', 'protect'], base, ctx);
+  assert.equal(output.at(-1).hardened, true);
+  const rulesetCall = calls.find((call) => call.path.endsWith('/rulesets')
+    && call.method === 'POST');
+  assert.deepEqual(rulesetCall.body.rules, [
+    { type: 'deletion' },
+    { type: 'non_fast_forward' },
+  ]);
+  assert.ok(!calls.some((call) => call.path.includes('/branches/main/protection')));
+
   await cmdCaller(['caller', 'inbox', 'check'], base, ctx);
   assert.equal(output.at(-1).ready, true);
+  assert.equal(output.at(-1).branch_protection.hardened, true);
   entry = findInbox(await readInboxRegistry(registryPath), base.node);
   assert.equal(entry.grant, 'collaborator-write');
   assert.ok(entry.granted_at);

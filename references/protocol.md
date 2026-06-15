@@ -114,9 +114,10 @@ the task first, then publishes only its ID and an HMAC authorization.
 The canonical credential intent is JSON with this exact field order:
 
 ```json
-{"version":"1","scheme":"voucher-hmac-v1","node_identity":"...","credential_id":"...","request_id":"...","capability_id":"...","input_digest":"sha256:...","expires":"..."}
+{"version":"1","scheme":"voucher-hmac-v1","node_identity":"...","credential_id":"...","request_id":"...","capability_id":"...","input_digest":"sha256:...","delivery_intent_digest":"sha256:...","expires":"..."}
 ```
 
+`delivery_intent_digest` is present when the task uses a delivery extension.
 `authorization` is:
 
 ```text
@@ -167,7 +168,8 @@ authorization:
 ```
 
 The HMAC binds `version`, `scheme`, `key_id`, `request_id`, `capability_id`,
-`input_digest`, and authorization expiry in that exact JSON key order.
+`input_digest`, optional `delivery_intent_digest`, and authorization expiry in
+that exact JSON key order.
 
 ## Acceptance
 
@@ -184,9 +186,12 @@ Before delivery, a GitHub node verifies:
 The node signs this canonical JSON field order with Ed25519:
 
 ```json
-{"version":"1","request_id":"...","capability_id":"echo","input_digest":"sha256:...","output_digest":"sha256:...","credential_digest":"sha256:...","task_intent_digest":"sha256:...","completed_at":"..."}
+{"version":"1","request_id":"...","capability_id":"echo","input_digest":"sha256:...","output_digest":"sha256:...","delivery_intent_digest":"sha256:...","credential_digest":"sha256:...","task_intent_digest":"sha256:...","completed_at":"..."}
 ```
 
+`delivery_intent_digest` is present for delivery-extension tasks and binds the
+transport, encryption key, repository or object endpoints, artifact paths, and
+immutable GitHub input commit.
 The two credential fields are present together only for credential-backed
 tasks. Their absence preserves the original free-task canonical payload.
 

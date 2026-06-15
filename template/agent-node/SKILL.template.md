@@ -10,7 +10,7 @@ Use this skill for Issues titled `[task] <capability_id>`.
 ## Validate
 
 ```bash
-npx --yes creamlon@0.5.0 watch owner/repo --repo-path . --once --pretty
+npx --yes creamlon@0.6.0 watch owner/repo --repo-path . --once --pretty
 ```
 
 Only execute tasks reported as valid. Validation covers the version 1 task
@@ -19,16 +19,16 @@ request IDs.
 
 ## Private delivery tasks
 
-When a task includes `extensions.delivery`, decrypt input and upload encrypted
-output around the core `deliver` step:
+When a task includes `extensions.delivery`, decrypt input before execution and
+upload encrypted output before the core `deliver` step:
 
 ```bash
-npx --yes creamlon@0.5.0 extension delivery fetch-input owner/repo <issue-number> \
+npx --yes creamlon@0.6.0 extension delivery fetch-input owner/repo <issue-number> \
   --repo-path . \
   --output-file ./input.bin \
   --input-get-url <private-get-url-if-presigned>
 
-npx --yes creamlon@0.5.0 extension delivery send-output owner/repo <issue-number> \
+npx --yes creamlon@0.6.0 extension delivery send-output owner/repo <issue-number> \
   --repo-path . \
   --output-file ./result.txt
 ```
@@ -41,7 +41,7 @@ publish `receive_public_key` in `creamlon.yaml`.
 Run the requested capability locally and write its result to a file:
 
 ```bash
-npx --yes creamlon@0.5.0 deliver owner/repo <issue-number> \
+npx --yes creamlon@0.6.0 deliver owner/repo <issue-number> \
   --repo-path . \
   --output-file ./result.txt \
   --pretty
@@ -54,7 +54,7 @@ interrupted.
 Refresh discovery health afterward:
 
 ```bash
-npx --yes creamlon@0.5.0 status --repo-path .
+npx --yes creamlon@0.6.0 status --repo-path .
 ```
 
 Commit `trust/proofs.log` and `trust/status.json`.
@@ -62,7 +62,7 @@ Commit `trust/proofs.log` and `trust/status.json`.
 ## Reject
 
 ```bash
-npx --yes creamlon@0.5.0 reject owner/repo <issue-number> --repo-path . --pretty
+npx --yes creamlon@0.6.0 reject owner/repo <issue-number> --repo-path . --pretty
 ```
 
 Reject invalid or unsupported tasks without signing a proof.
@@ -72,4 +72,4 @@ Reject invalid or unsupported tasks without signing a proof.
 - Never commit `.creamlon/` or private keys.
 - Do not expose private task data in Issue comments.
 - If authorization is enabled, rotate a leaked HMAC secret immediately.
-- Record Ed25519 identity changes with `npx --yes creamlon@0.5.0 key-rotate`.
+- Record Ed25519 identity changes with `npx --yes creamlon@0.6.0 key-rotate`.

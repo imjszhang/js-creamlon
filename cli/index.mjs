@@ -71,7 +71,11 @@ import {
 } from '../lib/credential.mjs';
 import { cmdExtension, EXTENSION_DELIVERY_HELP } from './extensionDelivery.mjs';
 import { cmdCaller, CALLER_HELP } from './callerInbox.mjs';
-import { parseManifestDelivery } from '../lib/extensions/delivery/schema.mjs';
+import {
+  deliveryIntentDigest,
+  parseManifestDelivery,
+  validateTaskDelivery,
+} from '../lib/extensions/delivery/schema.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -86,6 +90,7 @@ const VALUE_OPTIONS = new Set([
   '--input-type', '--output-type', '--status', '--limit', '--sort', '--cache-ttl',
   '--old-public-key', '--new-public-key', '--rotated-at', '--status-out',
   '--credential', '--credentials', '--credential-digest', '--task-intent-digest',
+  '--delivery-intent-digest',
   '--extensions-file', '--extensions-json', '--transport', '--outbox-dir', '--extensions-out',
   '--input-upload-url', '--input-get-url', '--output-upload-url', '--output-get-url',
   '--github-repo', '--github-input-path', '--github-output-path', '--github-ref',
@@ -173,6 +178,7 @@ Options:
   --output-digest <sha256:...>
   --credential-digest <sha256:...>   Optional; requires --task-intent-digest
   --task-intent-digest <sha256:...>  Optional; requires --credential-digest
+  --delivery-intent-digest <sha256:...> Optional delivery binding
   --key <path>          Private key file (default: .creamlon/private.key)
   --completed-at <iso>  Optional ISO timestamp
   --pretty              Pretty-print JSON`,
@@ -217,6 +223,7 @@ Options:
   --keys <path>                 Private HMAC key map
   --authorization-expires <iso>
   --credential <crv1_...>  One-time task credential
+  --task-file <path>       Submit an existing task YAML
   --extensions-file <json>   Task extensions JSON object
   --extensions-json <json>   Inline task extensions JSON
   --ref <branch>         creamlon.yaml branch (default: main)
@@ -329,6 +336,7 @@ function parseArgs(argv) {
     else if (arg === '--credentials') { i += 1; opts.credentials = argv[i]; }
     else if (arg === '--credential-digest') { i += 1; opts.credentialDigest = argv[i]; }
     else if (arg === '--task-intent-digest') { i += 1; opts.taskIntentDigest = argv[i]; }
+    else if (arg === '--delivery-intent-digest') { i += 1; opts.deliveryIntentDigest = argv[i]; }
     else if (arg === '--extensions-file') { i += 1; opts.extensionsFile = argv[i]; }
     else if (arg === '--extensions-json') { i += 1; opts.extensionsJson = argv[i]; }
     else if (arg === '--transport') { i += 1; opts.transport = argv[i]; }
@@ -350,6 +358,7 @@ function parseArgs(argv) {
     else if (arg === '--delivery-key') { i += 1; opts.deliveryKey = argv[i]; }
     else if (arg === '--proof-file') { i += 1; opts.proofFile = argv[i]; }
     else if (arg === '--no-verify') opts.noVerify = true;
+    else if (arg === '--allow-trial-inbox') opts.allowTrialInbox = true;
     else if (arg === '--node') { i += 1; opts.node = argv[i]; }
     else if (arg === '--registry') { i += 1; opts.registry = argv[i]; }
     else if (arg === '--operator') { i += 1; opts.operator = argv[i]; }
@@ -449,12 +458,16 @@ async function cmdSign(opts) {
     assertValidHashDigest(opts.credentialDigest, 'credential_digest');
     assertValidHashDigest(opts.taskIntentDigest, 'task_intent_digest');
   }
+  if (opts.deliveryIntentDigest) {
+    assertValidHashDigest(opts.deliveryIntentDigest, 'delivery_intent_digest');
+  }
   const privateKey = await readPrivateKeyFile(keyPath);
   const fields = buildProofFields({
     requestId: opts.requestId,
     capabilityId: opts.capabilityId,
     inputDigest: opts.inputDigest,
     outputDigest: opts.outputDigest,
+    deliveryIntentDigest: opts.deliveryIntentDigest,
     credentialDigest: opts.credentialDigest,
     taskIntentDigest: opts.taskIntentDigest,
     completedAt: opts.completedAt,
@@ -593,36 +606,55 @@ async function cmdDiscover(positional, opts) {
 async function cmdSubmit(positional, opts) {
   const slug = positional[1];
   if (!slug) throw usageError('submit requires <owner/repo>');
-  if (!opts.capabilityId) throw usageError('submit requires --capability-id');
-  if (!opts.requester) throw usageError('submit requires --requester');
 
   const token = resolveToken(opts);
   const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
   const capIds = parsed.capabilities.map((capability) => capability.id);
-  const task = {
-    version: '1',
-    request_id: opts.requestId || randomUUID(),
-    capability_id: opts.capabilityId,
-    requester: opts.requester,
-    expires: opts.expires || null,
-    authorization: null,
-    credential: null,
-    input: {
-      media_type: opts.mediaType || null,
-      value: null,
-      url: null,
-      digest: null,
-    },
-  };
-
-  if (!opts.mediaType) throw usageError('submit requires --media-type');
-  const inputModes = [opts.input, opts.inputDigest, opts.inputUrl].filter((value) => value != null);
-  if (inputModes.length === 0) throw usageError('submit requires --input, --input-digest, or --input-url');
-  if (inputModes.length > 1) throw usageError('submit: only one input mode allowed');
-
-  if (opts.input != null) task.input.value = opts.input;
-  if (opts.inputDigest) task.input.digest = opts.inputDigest;
-  if (opts.inputUrl) task.input.url = opts.inputUrl;
+  let task;
+  if (opts.taskFile) {
+    task = parseTask(await readFile(resolve(opts.taskFile), 'utf8'));
+  } else {
+    if (!opts.capabilityId) throw usageError('submit requires --capability-id');
+    if (!opts.requester) throw usageError('submit requires --requester');
+    if (!opts.mediaType) throw usageError('submit requires --media-type');
+    const inputModes = [opts.input, opts.inputDigest, opts.inputUrl]
+      .filter((value) => value != null);
+    if (inputModes.length === 0) {
+      throw usageError('submit requires --input, --input-digest, or --input-url');
+    }
+    if (inputModes.length > 1) throw usageError('submit: only one input mode allowed');
+    task = {
+      version: '1',
+      request_id: opts.requestId || randomUUID(),
+      capability_id: opts.capabilityId,
+      requester: opts.requester,
+      expires: opts.expires || null,
+      authorization: null,
+      credential: null,
+      input: {
+        media_type: opts.mediaType,
+        value: opts.input ?? null,
+        url: opts.inputUrl || null,
+        digest: opts.inputDigest || null,
+      },
+    };
+    if (opts.extensionsFile) {
+      const raw = JSON.parse(await readFile(resolve(opts.extensionsFile), 'utf8'));
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        fail('extensions file must be a JSON object');
+      }
+      task.extensions = raw;
+    } else if (opts.extensionsJson) {
+      const raw = JSON.parse(opts.extensionsJson);
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        fail('extensions JSON must be an object');
+      }
+      task.extensions = raw;
+    }
+    if (task.extensions?.delivery) {
+      throw usageError('delivery submit requires --task-file');
+    }
+  }
 
   const authorizationRequired = !!parsed.profiles?.authorization;
   if (authorizationRequired) {
@@ -651,25 +683,17 @@ async function cmdSubmit(positional, opts) {
     task.credential = authorizeCredential(task, parsed, opts.credential);
   }
 
-  if (opts.extensionsFile) {
-    const raw = JSON.parse(await readFile(resolve(opts.extensionsFile), 'utf8'));
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      fail('extensions file must be a JSON object');
-    }
-    task.extensions = raw;
-  } else if (opts.extensionsJson) {
-    const raw = JSON.parse(opts.extensionsJson);
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      fail('extensions JSON must be an object');
-    }
-    task.extensions = raw;
-  }
-
   const errors = validateTask(task, {
     capability_ids: capIds,
     authorization_required: authorizationRequired,
     credential_required: credentialRequired,
   });
+  if (task.extensions?.delivery) {
+    errors.push(...validateTaskDelivery(task.extensions.delivery, {
+      manifestDelivery: parseManifestDelivery(parsed),
+      requestId: task.request_id,
+    }));
+  }
   if (errors.length) fail(`invalid task: ${errors.join('; ')}`);
 
   const body = serializeTask(task);
@@ -772,6 +796,12 @@ async function cmdDeliver(positional, opts) {
   const proofsPath = join(repoPath, 'trust', 'proofs.log');
   const redemptionsPath = join(repoPath, 'trust', 'redemptions.log');
   const statePath = join(repoPath, '.creamlon', 'deliveries', `${issueNumber}.json`);
+  const outputStatePath = join(
+    repoPath,
+    '.creamlon',
+    'deliveries',
+    `${issueNumber}.output.json`,
+  );
   const lockPath = join(repoPath, '.creamlon', 'deliver.lock');
   const releaseLock = opts.dryRun ? null : await acquireDeliveryLock(lockPath);
 
@@ -797,6 +827,19 @@ async function cmdDeliver(positional, opts) {
 
     const inputDigest = resolveInputDigest(task);
     const outputDigest = await hashFile(opts.outputFile);
+    if (task.extensions?.delivery) {
+      const outputState = await readDeliveryState(outputStatePath);
+      if (!outputState
+        || outputState.request_id !== task.request_id
+        || outputState.transport !== task.extensions.delivery.transport
+        || outputState.output_digest !== outputDigest) {
+        fail(
+          `cannot deliver: upload output first with extension delivery send-output `
+            + `${slug} ${issueNumber} --repo-path ${repoPath} --output-file ${opts.outputFile}`,
+          4,
+        );
+      }
+    }
     let proof = existingState?.proof || null;
     if (proof) {
       const binding = verifyProofBinding(proof, task, inputDigest, { manifest: parsed });
@@ -810,6 +853,7 @@ async function cmdDeliver(positional, opts) {
         capabilityId: task.capability_id,
         inputDigest,
         outputDigest,
+        deliveryIntentDigest: deliveryIntentDigest(task),
         credentialDigest: acceptance.credential_digest,
         taskIntentDigest: acceptance.task_intent_digest,
         completedAt: opts.completedAt,

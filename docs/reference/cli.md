@@ -2,7 +2,7 @@
 title: CLI reference
 audience: all users
 status: current
-verified: 0.5.0
+verified: 0.6.0
 ---
 
 # CLI reference
@@ -26,7 +26,7 @@ matches the documentation version you are reading.
 | Operate task Issues | `watch`, `deliver`, `reject` |
 | Manage node identity | `keygen`, `key-rotate` |
 | Manage access | `credential create`, `credential list`, `credential revoke`, `hmac-key-new` |
-| Manage caller inboxes | `caller inbox init`, `grant`, `check`, `revoke` |
+| Manage caller inboxes | `caller inbox init`, `grant`, `protect`, `check`, `revoke` |
 | Work with proofs | `hash`, `sign`, `verify`, `audit`, `status` |
 | Create a node | `init` |
 | Use private delivery | `extension delivery ...` |

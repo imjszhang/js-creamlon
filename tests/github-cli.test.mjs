@@ -226,12 +226,21 @@ test('submit supports a free node without authorization options', async () => {
   assert.doesNotMatch(calls[0].body, /authorization:/);
 });
 
-test('submit attaches task extensions from --extensions-file', async () => {
+test('submit posts the exact delivery task from --task-file', async () => {
   const { publicKeyBase64Url } = await generateKeyPair(null);
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-submit-ext-'));
-  const extensionsPath = join(dir, 'extensions.json');
-  await writeFile(extensionsPath, `${JSON.stringify({
-    delivery: {
+  const taskPath = join(dir, 'task.yaml');
+  const task = {
+    version: '1',
+    request_id: 'req-task-file',
+    capability_id: 'echo',
+    requester: 'github:alice/caller',
+    input: {
+      media_type: 'text/plain',
+      digest: hashText('hello'),
+    },
+    extensions: {
+      delivery: {
       scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
       transport: 'presigned-object-storage',
       ephemeral_public_key: 'YWJjZGVmZ2hpamsxMjM0NTY3ODkwQUJDREVGR0hJSktMTU5P',
@@ -240,7 +249,9 @@ test('submit attaches task extensions from --extensions-file', async () => {
         output: { upload_url: 'https://storage.example/output-put' },
       },
     },
-  })}\n`);
+    },
+  };
+  await writeFile(taskPath, serializeTask(task));
   const calls = [];
   installMockFetch((url, init) => {
     if (url.includes('raw.githubusercontent.com')) {
@@ -259,11 +270,7 @@ test('submit attaches task extensions from --extensions-file', async () => {
   try {
     await runCli([
       'submit', 'owner/repo',
-      '--capability-id', 'echo',
-      '--media-type', 'text/plain',
-      '--input-digest', hashText('hello'),
-      '--requester', 'github:alice/caller',
-      '--extensions-file', extensionsPath,
+      '--task-file', taskPath,
       '--token', 'test-token',
     ]);
   } finally {
@@ -272,8 +279,9 @@ test('submit attaches task extensions from --extensions-file', async () => {
   }
 
   assert.equal(calls.length, 1);
-  const task = parseTask(calls[0].body);
-  assert.equal(task.extensions.delivery.transport, 'presigned-object-storage');
+  const submitted = parseTask(calls[0].body);
+  assert.equal(submitted.request_id, 'req-task-file');
+  assert.deepEqual(submitted.extensions, task.extensions);
 });
 
 test('credential CLI creates, lists, and revokes without reprinting secrets', async () => {

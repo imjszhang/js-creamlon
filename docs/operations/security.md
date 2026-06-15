@@ -2,7 +2,7 @@
 title: Security
 audience: all users
 status: current
-verified: 0.5.0
+verified: 0.6.0
 ---
 
 # Security
@@ -30,6 +30,12 @@ Encrypted delivery does not hide all metadata. A public task using
 artifact paths, request ID, ephemeral public key, and input digest. Use opaque
 paths and choose `presigned-object-storage` when this correlation or standing
 cross-account repository access is unacceptable.
+
+GitHub delivery pins each input to the commit returned by upload. Protect the
+inbox branch against force-push and deletion, but do not treat Git history as
+task isolation: a collaborator can still disrupt other paths at the branch
+head. Digest and signed delivery-intent verification prevent modified content
+from being accepted as the original task.
 
 ## Verify before accepting
 

@@ -177,7 +177,7 @@ file, release asset, object-storage URL, or another transport.
 ### Install the CLI
 
 ```bash
-npm install --global creamlon@0.5.0
+npm install --global creamlon@0.6.0
 creamlon help
 ```
 
@@ -340,16 +340,26 @@ CLI helpers:
 creamlon extension delivery keygen --out .creamlon
 creamlon caller inbox init --node owner/repo
 creamlon caller inbox grant --node owner/repo
-creamlon extension delivery prepare owner/repo
-creamlon extension delivery send-input --task-file task.yaml --input-file input.bin
+creamlon caller inbox protect --node owner/repo
+creamlon extension delivery prepare owner/repo --request-id <id>
+creamlon extension delivery draft --task-file task.yaml \
+  --extensions-file .creamlon/outbox/<id>.extensions.json \
+  --request-id <id> --capability-id <capability> \
+  --requester github:caller/repo --media-type application/octet-stream \
+  --input-digest <sha256-digest>
+creamlon extension delivery send-input --task-file task.yaml --input-file input.bin \
+  --extensions-file .creamlon/outbox/<id>.extensions.json \
+  --outbox .creamlon/outbox/<id>.json
+creamlon submit owner/repo --task-file task.yaml
 creamlon extension delivery fetch-output owner/repo <issue#> --outbox .creamlon/outbox/<id>.json
 ```
 
 GitHub private repositories are the default delivery transport. Use a separate
-caller-owned inbox per node operator. Presigned object storage remains an
-escape hatch when standing GitHub access is undesirable. Artifact transport
-and external payment remain extension concerns. Core still verifies digests,
-credentials, and Ed25519 proofs.
+caller-owned inbox per node. GitHub inputs are uploaded before task
+submission and pinned to the resulting commit. Presigned object storage remains
+an escape hatch when standing GitHub access is undesirable. Artifact transport
+and external payment remain extension concerns. Core verifies digests,
+immutable delivery intent, credentials, and Ed25519 proofs.
 
 ## Documentation
 

@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import {
   addRepositoryCollaborator,
   createPrivateRepository,
+  ensureInboxRuleset,
   getAuthenticatedUser,
+  getBranchRules,
   getRepository,
   getRepositoryCollaboratorPermission,
   getUser,
@@ -217,6 +219,27 @@ async function cmdCheck(opts, ctx) {
   const tokenPermissions = repository.permissions || {};
   const operatorCanWrite = ['admin', 'maintain', 'write'].includes(operatorPermission);
   const ready = Boolean(repository.private && tokenPermissions.push && operatorCanWrite);
+  let branchProtection = {
+    available: true,
+    force_push_blocked: false,
+    deletion_blocked: false,
+    hardened: false,
+  };
+  try {
+    const rules = await getBranchRules(owner, repo, entry.ref, token);
+    const ruleTypes = new Set(rules.map((rule) => rule.type));
+    const forcePushBlocked = ruleTypes.has('non_fast_forward');
+    const deletionBlocked = ruleTypes.has('deletion');
+    branchProtection = {
+      available: true,
+      force_push_blocked: forcePushBlocked,
+      deletion_blocked: deletionBlocked,
+      hardened: forcePushBlocked && deletionBlocked,
+    };
+  } catch (error) {
+    if (error.status !== 403 && error.status !== 404) throw error;
+    branchProtection.available = false;
+  }
   if (ready && entry.grant?.startsWith('invitation-pending-')) {
     await updateInboxRegistry(registryPath, (current) => {
       const latest = requireEntry(current, node);
@@ -243,6 +266,39 @@ async function cmdCheck(opts, ctx) {
       write: operatorCanWrite,
     },
     ready,
+    branch_protection: branchProtection,
+  }, opts.pretty);
+}
+
+async function cmdProtect(opts, ctx) {
+  const node = opts.node;
+  if (!node) throw usageError('caller inbox protect requires --node owner/repo');
+  const token = requireToken(opts, ctx, 'caller inbox protect');
+  const registryPath = opts.registry || DEFAULT_INBOX_REGISTRY;
+  const registry = await readInboxRegistry(registryPath, { optional: false });
+  const entry = requireEntry(registry, node);
+  const { owner, repo } = parseGithubRepo(entry.repo);
+  try {
+    await ensureInboxRuleset(owner, repo, entry.ref, token);
+  } catch (error) {
+    if (error.status === 403 || error.status === 404) {
+      fail(
+        `cannot protect inbox branch ${owner}/${repo}:${entry.ref}; `
+          + 'the token needs repository administration access and the GitHub plan '
+          + 'must support repository rulesets for private repositories',
+        4,
+      );
+    }
+    throw error;
+  }
+  ctx.printJson({
+    ok: true,
+    node,
+    repo: entry.repo,
+    ref: entry.ref,
+    force_push_blocked: true,
+    deletion_blocked: true,
+    hardened: true,
   }, opts.pretty);
 }
 
@@ -293,11 +349,14 @@ export async function cmdCaller(positional, opts, ctx) {
     case 'check':
       await cmdCheck(opts, ctx);
       break;
+    case 'protect':
+      await cmdProtect(opts, ctx);
+      break;
     case 'revoke':
       await cmdRevoke(opts, ctx);
       break;
     default:
-      throw usageError('caller inbox requires init, grant, check, or revoke');
+      throw usageError('caller inbox requires init, grant, check, protect, or revoke');
   }
 }
 
@@ -307,6 +366,7 @@ Commands:
   init       Create or register a private per-node inbox repository
   grant      Invite the node operator, or detect owner access
   check      Show caller-token and operator repository permissions
+  protect    Block force-push and deletion on the inbox branch
   revoke     Remove collaborator access (repository owners are unchanged)
 
 Options:

@@ -16,9 +16,15 @@ import {
   validateManifestDelivery,
   validateTaskDelivery,
 } from '../lib/extensions/delivery/schema.mjs';
-import { serializeTask } from '../lib/task.mjs';
-import { cmdExtensionDeliveryPrepare } from '../cli/extensionDelivery.mjs';
+import { parseTask, serializeTask } from '../lib/task.mjs';
+import {
+  cmdExtensionDeliveryDraft,
+  cmdExtensionDeliveryPrepare,
+  cmdExtensionDeliverySendInput,
+  cmdExtensionDeliverySendOutput,
+} from '../cli/extensionDelivery.mjs';
 import { writeInboxRegistry } from '../lib/inboxRegistry.mjs';
+import { setGithubFetch } from '../lib/github.mjs';
 
 test('prepare writes outbox and task extensions for presigned transport', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-outbox-'));
@@ -97,6 +103,15 @@ test('validateTaskDelivery rejects unsafe GitHub artifact paths', () => {
   };
   assert.ok(validateTaskDelivery(delivery)
     .some((error) => error.includes('input_path must be a safe relative path')));
+  assert.ok(validateTaskDelivery({
+    ...delivery,
+    github: {
+      ...delivery.github,
+      input_path: 'tasks/other/input.enc',
+      input_commit: 'a'.repeat(40),
+    },
+  }, { requestId: 'req-expected' })
+    .some((error) => error.includes('must contain task request_id')));
 });
 
 test('presigned transport rejects HTTP, credentials, localhost, and private addresses', () => {
@@ -207,6 +222,52 @@ test('delivery prepare rejects unsafe GitHub path overrides', async () => {
       },
     ),
     /safe relative path/,
+  );
+});
+
+test('delivery prepare requires explicit consent for a trial inbox', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-trial-prepare-'));
+  const registryPath = join(dir, 'inboxes.yaml');
+  await writeInboxRegistry(registryPath, {
+    version: '1',
+    inboxes: [{
+      node: 'bob/echo-node',
+      operator: 'bob',
+      repo: 'github:alice/trial-inbox',
+      trust: 'trial',
+    }],
+  });
+  const keys = generateDeliveryKeyPair();
+  const ctx = {
+    loadManifestContext: async () => ({
+      parsed: {
+        extensions: {
+          delivery: {
+            scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+            receive_public_key: keys.public_key,
+            transports: ['github-private-repo'],
+          },
+        },
+      },
+    }),
+    printJson: () => {},
+  };
+  await assert.rejects(
+    () => cmdExtensionDeliveryPrepare(
+      ['extension', 'delivery', 'prepare', 'bob/echo-node'],
+      { registry: registryPath },
+      ctx,
+    ),
+    /requires --allow-trial-inbox/,
+  );
+  await cmdExtensionDeliveryPrepare(
+    ['extension', 'delivery', 'prepare', 'bob/echo-node'],
+    {
+      registry: registryPath,
+      allowTrialInbox: true,
+      outboxDir: join(dir, 'outbox'),
+    },
+    ctx,
   );
 });
 
@@ -405,4 +466,210 @@ test('serializeTask preserves delivery extensions', async () => {
   const yaml = serializeTask(task);
   assert.match(yaml, /extensions:/);
   assert.match(yaml, /presigned-object-storage/);
+});
+
+test('delivery draft writes the task used by send-input and submit', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-delivery-draft-'));
+  const prepared = await prepareDelivery({
+    transport: 'github-private-repo',
+    requestId: 'req-draft',
+    github: {
+      repo: 'github:alice/inbox',
+      input_path: 'tasks/{request_id}/input.enc',
+      output_path: 'tasks/{request_id}/output.enc',
+      ref: 'main',
+    },
+    outboxDir: join(dir, 'outbox'),
+  });
+  const extensionsPath = join(dir, 'extensions.json');
+  const taskPath = join(dir, 'task.yaml');
+  await writeFile(extensionsPath, JSON.stringify(prepared.extensions));
+  await cmdExtensionDeliveryDraft({
+    taskFile: taskPath,
+    extensionsFile: extensionsPath,
+    requestId: prepared.request_id,
+    capabilityId: 'echo',
+    requester: 'github:alice/caller',
+    mediaType: 'application/octet-stream',
+    inputDigest: hashBuffer('input'),
+  }, {
+    printJson: () => {},
+  });
+  const task = parseTask(await readFile(taskPath, 'utf8'));
+  assert.equal(task.request_id, prepared.request_id);
+  assert.deepEqual(task.extensions, prepared.extensions);
+});
+
+test('github send-input writes the immutable commit to task, extensions, and outbox', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-github-send-input-'));
+  const nodeKeys = generateDeliveryKeyPair();
+  const prepared = await prepareDelivery({
+    transport: 'github-private-repo',
+    requestId: 'req-writeback',
+    github: {
+      repo: 'github:alice/inbox',
+      input_path: 'tasks/{request_id}/input.enc',
+      output_path: 'tasks/{request_id}/output.enc',
+      ref: 'main',
+    },
+    outboxDir: join(dir, 'outbox'),
+  });
+  const input = Buffer.from('writeback input');
+  const task = {
+    version: '1',
+    request_id: prepared.request_id,
+    capability_id: 'echo',
+    requester: 'github:alice/caller',
+    input: { media_type: 'application/octet-stream', digest: hashBuffer(input) },
+    extensions: prepared.extensions,
+  };
+  const taskPath = join(dir, 'task.yaml');
+  const inputPath = join(dir, 'input.bin');
+  const extensionsPath = join(dir, 'extensions.json');
+  await writeFile(taskPath, serializeTask(task));
+  await writeFile(inputPath, input);
+  await writeFile(extensionsPath, `${JSON.stringify(prepared.extensions)}\n`);
+  const commitSha = 'b'.repeat(40);
+  setGithubFetch(async (url, init = {}) => {
+    if (init.method === 'PUT') {
+      return {
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({
+          content: { sha: 'content-sha' },
+          commit: { sha: commitSha },
+        }),
+      };
+    }
+    return {
+      ok: false,
+      status: 404,
+      text: async () => JSON.stringify({ message: 'not found' }),
+    };
+  });
+  try {
+    await cmdExtensionDeliverySendInput({
+      taskFile: taskPath,
+      inputFile: inputPath,
+      extensionsFile: extensionsPath,
+      outbox: prepared.outbox_path,
+      receivePublicKey: nodeKeys.public_key,
+      token: 'caller-token',
+    }, {
+      resolveToken: (opts) => opts.token,
+      printJson: () => {},
+    });
+  } finally {
+    setGithubFetch(globalThis.fetch);
+  }
+  assert.equal(
+    parseTask(await readFile(taskPath, 'utf8')).extensions.delivery.github.input_commit,
+    commitSha,
+  );
+  assert.equal(
+    JSON.parse(await readFile(extensionsPath, 'utf8')).delivery.github.input_commit,
+    commitSha,
+  );
+  assert.equal(
+    JSON.parse(await readFile(prepared.outbox_path, 'utf8')).github.input_commit,
+    commitSha,
+  );
+});
+
+test('fetch-output rejects an outbox bound to a different artifact path', async () => {
+  const prepared = await prepareDelivery({
+    transport: 'presigned-object-storage',
+    requestId: 'req-outbox-binding',
+    inputUploadUrl: 'https://storage.example/input-put',
+    inputGetUrl: 'https://storage.example/input-get',
+    outputUploadUrl: 'https://storage.example/output-put',
+    outputGetUrl: 'https://storage.example/output-get',
+    outboxDir: await mkdtemp(join(tmpdir(), 'creamlon-outbox-binding-')),
+  });
+  const task = {
+    request_id: prepared.request_id,
+    extensions: {
+      delivery: {
+        ...prepared.extensions.delivery,
+        ephemeral_public_key: generateDeliveryKeyPair().public_key,
+      },
+    },
+  };
+  await assert.rejects(
+    () => fetchOutput({
+      task,
+      proof: { output_digest: hashBuffer('output') },
+      outboxFile: prepared.outbox_path,
+      outputFile: join(tmpdir(), 'unreachable-output'),
+    }),
+    /outbox ephemeral_public_key does not match task delivery/,
+  );
+});
+
+test('send-output records a digest-bound receipt for deliver', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-output-receipt-'));
+  const prepared = await prepareDelivery({
+    transport: 'presigned-object-storage',
+    requestId: 'req-output-receipt',
+    inputUploadUrl: 'https://storage.example/input-put',
+    inputGetUrl: 'https://storage.example/input-get',
+    outputUploadUrl: 'https://storage.example/output-put',
+    outputGetUrl: 'https://storage.example/output-get',
+    outboxDir: join(dir, 'outbox'),
+  });
+  const task = {
+    version: '1',
+    request_id: prepared.request_id,
+    capability_id: 'echo',
+    requester: 'github:alice/caller',
+    input: { media_type: 'application/octet-stream', digest: hashBuffer('input') },
+    extensions: prepared.extensions,
+  };
+  const outputPath = join(dir, 'result.bin');
+  await writeFile(outputPath, 'result');
+  setGithubFetch(async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ body: serializeTask(task) }),
+  }));
+  setPresignedFetch(async (_url, init = {}) => ({
+    ok: init.method === 'PUT',
+    status: init.method === 'PUT' ? 200 : 404,
+  }));
+  try {
+    await cmdExtensionDeliverySendOutput(
+      ['extension', 'delivery', 'send-output', 'owner/repo', '12'],
+      {
+        outputFile: outputPath,
+        repoPath: dir,
+        token: 'node-token',
+      },
+      {
+        loadManifestContext: async () => ({
+          owner: 'owner',
+          repo: 'repo',
+          parsed: {
+            extensions: {
+              delivery: {
+                scheme: prepared.extensions.delivery.scheme,
+                transports: ['presigned-object-storage'],
+                presigned_hosts: ['storage.example'],
+              },
+            },
+          },
+        }),
+        resolveToken: (opts) => opts.token,
+        printJson: () => {},
+      },
+    );
+  } finally {
+    setGithubFetch(globalThis.fetch);
+    setPresignedFetch(globalThis.fetch);
+  }
+  const receipt = JSON.parse(await readFile(
+    join(dir, '.creamlon', 'deliveries', '12.output.json'),
+    'utf8',
+  ));
+  assert.equal(receipt.request_id, task.request_id);
+  assert.equal(receipt.output_digest, hashBuffer('result'));
 });

@@ -1,7 +1,27 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-06-15
 
+### Breaking
+
+- GitHub private-repository delivery now requires an immutable
+  `delivery.github.input_commit`. Callers must upload input before submitting
+  the Issue; nodes fetch input from that commit rather than the branch head.
+- Delivery transport metadata is now bound into HMAC authorization,
+  credential intent, and signed delivery proofs through
+  `delivery_intent_digest`.
+
+### Added
+
+- Added `caller inbox protect` and branch-hardening status to prevent
+  force-push and deletion through a dedicated ruleset without replacing
+  existing branch protection or repository rules.
+- Added `extension delivery draft` and `submit --task-file` so upload and Issue
+  submission use one task document.
+- Private delivery now requires `send-output` before `deliver`; the node stores
+  a request- and digest-bound upload receipt before publishing a proof.
+- Trial inboxes now require explicit `--allow-trial-inbox`; presigned object
+  storage remains the recommended trial transport.
 - Added caller-owned, per-node inbox registries and `caller inbox`
   initialization, collaborator grant, permission check, and revoke commands.
 - Added optional `profiles.github.operator` and delivery inbox path hints.

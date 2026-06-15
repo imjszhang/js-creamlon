@@ -99,6 +99,38 @@ test('credential authorization binds node, task, input, capability, and expiry',
   );
 });
 
+test('credential authorization binds the immutable delivery commit', () => {
+  const generated = generateCredential();
+  const current = task();
+  current.extensions = {
+    delivery: {
+      scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+      transport: 'github-private-repo',
+      ephemeral_public_key: 'A'.repeat(43),
+      github: {
+        repo: 'github:alice/inbox',
+        ref: 'main',
+        input_path: 'tasks/req-paid-1/input.enc',
+        input_commit: 'a'.repeat(40),
+        output_path: 'tasks/req-paid-1/output.enc',
+      },
+    },
+  };
+  current.credential = authorizeCredential(current, MANIFEST, generated.value);
+  const record = {
+    credential_id: generated.credential_id,
+    secret: generated.secret,
+    capability_id: 'review',
+    status: 'available',
+  };
+  const changed = structuredClone(current);
+  changed.extensions.delivery.github.input_commit = 'b'.repeat(40);
+  assert.equal(
+    verifyCredentialAuthorization(changed, MANIFEST, changed.credential, record).ok,
+    false,
+  );
+});
+
 test('public task serialization never includes the credential secret', () => {
   const generated = generateCredential();
   const current = task();

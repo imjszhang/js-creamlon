@@ -1,6 +1,12 @@
-import { chmod, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { chmod, readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
-import { parseTask, resolveInputDigest } from '../lib/task.mjs';
+import { isDeepStrictEqual } from 'node:util';
+import {
+  parseTask,
+  resolveInputDigest,
+  serializeTask,
+  validateTask,
+} from '../lib/task.mjs';
 import { parseProofJson, publicKeyFromBase64Url, verifyProof } from '../lib/proof.mjs';
 import { parseRepoSlug } from '../lib/manifest.mjs';
 import { getIssue, getIssueComments, getRepositoryFile } from '../lib/github.mjs';
@@ -21,6 +27,12 @@ import {
   findInbox,
   readInboxRegistry,
 } from '../lib/inboxRegistry.mjs';
+import {
+  assertOutboxMatchesTask,
+  readOutbox,
+  writeOutbox,
+} from '../lib/extensions/delivery/outbox.mjs';
+import { writeDeliveryState } from '../lib/deliveryState.mjs';
 
 function usageError(msg) {
   const err = new Error(msg);
@@ -120,6 +132,15 @@ export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManife
   if (registeredInbox?.trust === 'blocked') {
     fail(`inbox trust level blocks delivery to ${slug}`, 4);
   }
+  if (transport === 'github-private-repo'
+    && registeredInbox?.trust === 'trial'
+    && !opts.allowTrialInbox) {
+    fail(
+      `trial inbox for ${slug} requires --allow-trial-inbox or `
+        + '--transport presigned-object-storage',
+      4,
+    );
+  }
   const manifestTemplates = manifestDelivery?.github?.inbox_path_template;
   const github = transport === 'github-private-repo'
     ? {
@@ -198,6 +219,53 @@ export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManife
   }, opts.pretty);
 }
 
+export async function cmdExtensionDeliveryDraft(opts, { printJson }) {
+  if (!opts.taskFile) throw usageError('delivery draft requires --task-file');
+  if (!opts.extensionsFile) throw usageError('delivery draft requires --extensions-file');
+  if (!opts.requestId) throw usageError('delivery draft requires --request-id');
+  if (!opts.capabilityId) throw usageError('delivery draft requires --capability-id');
+  if (!opts.requester) throw usageError('delivery draft requires --requester');
+  if (!opts.mediaType) throw usageError('delivery draft requires --media-type');
+  if (!opts.inputDigest) throw usageError('delivery draft requires --input-digest');
+  const extensions = JSON.parse(await readFile(resolve(opts.extensionsFile), 'utf8'));
+  if (!extensions || typeof extensions !== 'object' || Array.isArray(extensions)) {
+    fail('extensions file must be a JSON object');
+  }
+  const task = {
+    version: '1',
+    request_id: opts.requestId,
+    capability_id: opts.capabilityId,
+    requester: opts.requester,
+    input: {
+      media_type: opts.mediaType,
+      value: null,
+      url: null,
+      digest: opts.inputDigest,
+    },
+    expires: opts.expires || null,
+    authorization: null,
+    credential: null,
+    extensions,
+  };
+  const errors = validateTask(task);
+  const deliveryErrors = validateTaskDelivery(task.extensions?.delivery, {
+    requestId: task.request_id,
+  }).filter((error) => error !== 'github delivery requires a valid delivery.github.input_commit');
+  if (errors.length || deliveryErrors.length) {
+    fail(`invalid task draft: ${[...errors, ...deliveryErrors].join('; ')}`);
+  }
+  const taskPath = resolve(opts.taskFile);
+  await mkdir(dirname(taskPath), { recursive: true });
+  const tempPath = `${taskPath}.${process.pid}.tmp`;
+  await writeFile(tempPath, serializeTask(task), { mode: 0o600 });
+  await rename(tempPath, taskPath);
+  printJson({
+    ok: true,
+    request_id: task.request_id,
+    task_file: taskPath,
+  }, opts.pretty);
+}
+
 export async function cmdExtensionDeliverySendInput(opts, { resolveToken, printJson }) {
   if (!opts.taskFile) throw usageError('send-input requires --task-file');
   if (!opts.inputFile) throw usageError('send-input requires --input-file');
@@ -213,6 +281,21 @@ export async function cmdExtensionDeliverySendInput(opts, { resolveToken, printJ
     manifest.extensions.delivery = manifest.extensions.delivery || {};
     manifest.extensions.delivery.receive_public_key = opts.receivePublicKey;
   }
+  let githubOutbox = null;
+  let githubOutboxPath = null;
+  if (task.extensions?.delivery?.transport === 'github-private-repo') {
+    if (!opts.outbox) throw usageError('github send-input requires --outbox');
+    if (!opts.extensionsFile) {
+      throw usageError('github send-input requires --extensions-file');
+    }
+    githubOutboxPath = resolve(opts.outbox);
+    githubOutbox = await readOutbox(githubOutboxPath);
+    assertOutboxMatchesTask(githubOutbox, task, { requireInputCommit: false });
+    const extensions = JSON.parse(await readFile(resolve(opts.extensionsFile), 'utf8'));
+    if (!isDeepStrictEqual(extensions, task.extensions)) {
+      fail('extensions file does not match task extensions');
+    }
+  }
   const result = await sendInput({
     task,
     manifest,
@@ -220,6 +303,25 @@ export async function cmdExtensionDeliverySendInput(opts, { resolveToken, printJ
     outboxPath: opts.outbox,
     token: resolveToken(opts),
   });
+  if (task.extensions?.delivery?.transport === 'github-private-repo') {
+    task.extensions.delivery.github.input_commit = result.input_commit;
+    const taskPath = resolve(opts.taskFile);
+    const taskTemp = `${taskPath}.${process.pid}.tmp`;
+    await writeFile(taskTemp, serializeTask(task), { mode: 0o600 });
+    await rename(taskTemp, taskPath);
+
+    const extensionsPath = resolve(opts.extensionsFile);
+    const extensionsTemp = `${extensionsPath}.${process.pid}.tmp`;
+    await writeFile(
+      extensionsTemp,
+      `${JSON.stringify(task.extensions, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    await rename(extensionsTemp, extensionsPath);
+
+    githubOutbox.github.input_commit = result.input_commit;
+    await writeOutbox(githubOutboxPath, githubOutbox);
+  }
   printJson({ ok: true, request_id: task.request_id, ...result }, opts.pretty);
 }
 
@@ -234,6 +336,7 @@ export async function cmdExtensionDeliveryFetchInput(positional, opts, { loadMan
   const task = parseTask(issue.body || '');
   const deliveryErrors = validateTaskDelivery(task?.extensions?.delivery, {
     manifestDelivery: parseManifestDelivery(parsed),
+    requestId: task?.request_id,
   });
   if (deliveryErrors.length) fail(`invalid task delivery extension: ${deliveryErrors.join('; ')}`);
   const keyPath = resolve(opts.deliveryKey || join(opts.repoPath || '.', '.creamlon', 'delivery.private.b64url'));
@@ -259,6 +362,7 @@ export async function cmdExtensionDeliverySendOutput(positional, opts, { loadMan
   const task = parseTask(issue.body || '');
   const deliveryErrors = validateTaskDelivery(task?.extensions?.delivery, {
     manifestDelivery: parseManifestDelivery(parsed),
+    requestId: task?.request_id,
   });
   if (deliveryErrors.length) fail(`invalid task delivery extension: ${deliveryErrors.join('; ')}`);
   const result = await sendOutput({
@@ -267,6 +371,18 @@ export async function cmdExtensionDeliverySendOutput(positional, opts, { loadMan
     token,
     allowedPresignedHosts: parseManifestDelivery(parsed)?.presigned_hosts || null,
   });
+  const repoPath = resolve(opts.repoPath || '.');
+  await writeDeliveryState(
+    join(repoPath, '.creamlon', 'deliveries', `${issueNumber}.output.json`),
+    {
+      version: '1',
+      issue_number: Number(issueNumber),
+      request_id: task.request_id,
+      output_digest: result.output_digest,
+      transport: result.transport,
+      uploaded_at: new Date().toISOString(),
+    },
+  );
   printJson({ ok: true, request_id: task.request_id, issue_number: Number(issueNumber), ...result }, opts.pretty);
 }
 
@@ -335,6 +451,9 @@ export async function cmdExtension(positional, opts, ctx) {
     case 'prepare':
       await cmdExtensionDeliveryPrepare(positional, opts, ctx);
       break;
+    case 'draft':
+      await cmdExtensionDeliveryDraft(opts, ctx);
+      break;
     case 'send-input':
       await cmdExtensionDeliverySendInput(opts, ctx);
       break;
@@ -357,6 +476,7 @@ export const EXTENSION_DELIVERY_HELP = `creamlon extension delivery <command>
 Commands:
   keygen [--out <dir>]                 Generate node X25519 delivery key pair
   prepare <owner/repo> [options]       Build task extensions and local outbox
+  draft [options]                      Build the task YAML used for upload and submit
   send-input [options]                 Encrypt and upload task input
   fetch-input <owner/repo> <issue#>    Decrypt task input on the node
   send-output <owner/repo> <issue#>    Encrypt and upload task output
@@ -375,13 +495,25 @@ prepare options:
   --github-input-path <template>       Default: tasks/{request_id}/input.enc
   --github-output-path <template>      Default: tasks/{request_id}/output.enc
   --github-ref <branch>
+  --allow-trial-inbox                   Explicitly use standing trial access
+
+draft options:
+  --task-file <path>                   Output task YAML
+  --extensions-file <path>             Extensions JSON from prepare
+  --request-id <id>
+  --capability-id <id>
+  --requester <github:owner/repo>
+  --media-type <type>
+  --input-digest <sha256:...>
+  --expires <iso>
 
 send-input options:
   --task-file <path>                   Task YAML
   --input-file <path>
   --manifest-file <json>               Node manifest JSON or use --receive-public-key
   --receive-public-key <b64>
-  --outbox <path>                      For github caller upload token in outbox
+  --outbox <path>                      Required for GitHub transport
+  --extensions-file <path>             Updated with immutable input commit
   --token <pat>                        Caller token; or GITHUB_TOKEN / GH_TOKEN
 
 fetch-input options:

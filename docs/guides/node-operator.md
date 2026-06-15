@@ -2,7 +2,7 @@
 title: Run a Creamlon node
 audience: node operators
 status: current
-verified: 0.5.0
+verified: 0.6.0
 ---
 
 # Run a Creamlon node
@@ -78,16 +78,25 @@ the node operator's `--token`, `GITHUB_TOKEN`, or `GH_TOKEN`. The caller must
 grant that token read/write contents access to the private inbox repository
 named in the task extension. GitHub may report missing access as `404`.
 Accept a pending invitation before running `fetch-input`. Callers can verify
-the resulting permission with `caller inbox check`.
+the resulting permission with `caller inbox check`. GitHub input tasks must
+contain `delivery.github.input_commit`; `fetch-input` reads that commit rather
+than the current branch head.
 
 ## 5. Deliver a result
 
 ```bash
+creamlon extension delivery send-output owner/repo <issue-number> \
+  --repo-path ./my-node \
+  --output-file ./result.txt
 creamlon deliver owner/repo <issue-number> \
   --repo-path ./my-node \
   --output-file ./result.txt \
   --pretty
 ```
+
+Private delivery output must be uploaded first. `send-output` records a local
+receipt bound to the request and plaintext digest; `deliver` refuses to publish
+the proof or close the Issue when that receipt is missing or mismatched.
 
 If publication is interrupted, repeat with `--resume`. Delivery is designed to
 continue through the `prepared`, `commented`, `logged`, and `closed` states
