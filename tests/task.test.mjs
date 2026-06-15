@@ -91,11 +91,11 @@ test('parseTask and serializeTask roundtrip extensions', () => {
   const yaml = `${YAML.trim()}
 extensions:
   delivery:
-    scheme: hpke-x25519-aes256gcm-v1
+    scheme: hpke-x25519-hkdf-sha256-aes256gcm-v2
     transport: presigned-object-storage
 `;
   const task = parseTask(yaml);
-  assert.equal(task.extensions.delivery.scheme, 'hpke-x25519-aes256gcm-v1');
+  assert.equal(task.extensions.delivery.scheme, 'hpke-x25519-hkdf-sha256-aes256gcm-v2');
   assert.deepEqual(validateTask(task), []);
   const reparsed = parseTask(serializeTask(task));
   assert.equal(reparsed.extensions.delivery.transport, 'presigned-object-storage');

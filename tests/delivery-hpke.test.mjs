@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DELIVERY_SCHEME,
-  LEGACY_DELIVERY_SCHEME,
   generateDeliveryKeyPair,
   seal,
   open,
@@ -17,10 +16,22 @@ test('delivery hpke roundtrips plaintext', () => {
   assert.equal(opened.toString('utf8'), payload.toString('utf8'));
 });
 
-test('delivery decrypts legacy version 1 ciphertexts', () => {
+test('delivery rejects removed hpke-v1 scheme', () => {
   const alice = generateDeliveryKeyPair();
-  const sealed = seal('legacy', alice.public_key, LEGACY_DELIVERY_SCHEME);
-  assert.equal(open(sealed, alice.private_key).toString('utf8'), 'legacy');
+  assert.throws(
+    () => seal('legacy', alice.public_key, 'hpke-x25519-aes256gcm-v1'),
+    /unsupported delivery ciphertext scheme/,
+  );
+  assert.throws(
+    () => open({
+      version: 1,
+      scheme: 'hpke-x25519-aes256gcm-v1',
+      ephemeral_public_key: alice.public_key,
+      iv: 'AAAAAAAAAAA',
+      ciphertext: 'AA',
+    }, alice.private_key),
+    /unsupported delivery ciphertext scheme/,
+  );
 });
 
 test('delivery rejects unsupported envelope versions and malformed nonces', () => {

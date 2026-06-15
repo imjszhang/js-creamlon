@@ -56,8 +56,8 @@ credential binding, and key-rotation history.
 ## Private delivery fails
 
 Confirm both peers use the advertised delivery scheme and transport. Keep
-outbox state and private URLs local. `delivery-hpke-v1` is legacy;
-`delivery-hpke-v2` is the current RFC 9180 scheme.
+outbox state and private URLs local. Nodes must advertise
+`hpke-x25519-hkdf-sha256-aes256gcm-v2` (RFC 9180).
 
 For `github-private-repo`, a `403` or `404` during `fetch-input` or
 `send-output` usually means the node token cannot access the caller-owned

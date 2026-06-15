@@ -62,6 +62,26 @@ test('delivery schema requires HTTPS URLs and a node host allowlist', () => {
   }, { manifestDelivery }).some((error) => error.includes('not allowed')));
 });
 
+test('validateTaskDelivery rejects removed hpke-v1 scheme', () => {
+  const manifestDelivery = {
+    scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+    receive_public_key: generateDeliveryKeyPair().public_key,
+    transports: ['github-private-repo'],
+  };
+  const delivery = {
+    scheme: 'hpke-x25519-aes256gcm-v1',
+    transport: 'github-private-repo',
+    ephemeral_public_key: generateDeliveryKeyPair().public_key,
+    github: {
+      repo: 'github:alice/deliveries',
+      input_path: 'inbox/req/input.enc',
+      output_path: 'inbox/req/output.enc',
+    },
+  };
+  const errors = validateTaskDelivery(delivery, { manifestDelivery });
+  assert.ok(errors.some((error) => error === 'unsupported delivery.scheme: hpke-x25519-aes256gcm-v1'));
+});
+
 test('presigned transport rejects HTTP, credentials, localhost, and private addresses', () => {
   assert.equal(validatePresignedUrl('https://storage.example/object'), 'https://storage.example/object');
   for (const url of [

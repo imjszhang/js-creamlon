@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 - 2026-06-15
+
+### Breaking
+
+- Removed legacy `delivery-hpke-v1` (`hpke-x25519-aes256gcm-v1`). Delivery
+  encryption and decryption now support only RFC 9180
+  `hpke-x25519-hkdf-sha256-aes256gcm-v2`.
+
 ## 0.4.1 - 2026-06-15
 
 - Added versioned user documentation for callers, node operators, security,

@@ -177,7 +177,7 @@ file, release asset, object-storage URL, or another transport.
 ### Install the CLI
 
 ```bash
-npm install --global creamlon@0.4.1
+npm install --global creamlon@0.5.0
 creamlon help
 ```
 

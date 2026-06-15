@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseManifest, validateManifest } from '../lib/manifest.mjs';
+import { generateDeliveryKeyPair } from '../lib/extensions/delivery/hpke.mjs';
 
 const YAML = `version: "1"
 name: agent
@@ -78,4 +79,35 @@ test('credential access requires the credential profile', () => {
     '    output:\n      media_types: [text/plain]\n    access:\n      mode: credential\n      units: 1',
   ));
   assert.ok(validateManifest(parsed).some((error) => error.includes('requires profiles.credential')));
+});
+
+test('validateManifest rejects unsupported delivery extension scheme', () => {
+  const keys = generateDeliveryKeyPair();
+  const parsed = parseManifest(YAML.replace(
+    'extensions:\n  mcp:',
+    `extensions:
+  delivery:
+    scheme: hpke-x25519-aes256gcm-v1
+    receive_public_key: ${keys.public_key}
+    transports:
+      - github-private-repo
+  mcp:`,
+  ));
+  assert.ok(validateManifest(parsed, { requireGithubProfile: true })
+    .some((error) => error.includes('unsupported delivery scheme: hpke-x25519-aes256gcm-v1')));
+});
+
+test('validateManifest accepts a valid delivery extension', () => {
+  const keys = generateDeliveryKeyPair();
+  const parsed = parseManifest(YAML.replace(
+    'extensions:\n  mcp:',
+    `extensions:
+  delivery:
+    scheme: hpke-x25519-hkdf-sha256-aes256gcm-v2
+    receive_public_key: ${keys.public_key}
+    transports:
+      - github-private-repo
+  mcp:`,
+  ));
+  assert.deepEqual(validateManifest(parsed, { requireGithubProfile: true }), []);
 });

@@ -1,6 +1,6 @@
 {
   "name": "creamlon",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Creamlon: lightweight identity and proof layer for discoverable agent capabilities",
   "type": "module",
   "bin": {

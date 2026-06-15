@@ -232,7 +232,7 @@ test('submit attaches task extensions from --extensions-file', async () => {
   const extensionsPath = join(dir, 'extensions.json');
   await writeFile(extensionsPath, `${JSON.stringify({
     delivery: {
-      scheme: 'hpke-x25519-aes256gcm-v1',
+      scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
       transport: 'presigned-object-storage',
       ephemeral_public_key: 'YWJjZGVmZ2hpamsxMjM0NTY3ODkwQUJDREVGR0hJSktMTU5P',
       artifacts: {

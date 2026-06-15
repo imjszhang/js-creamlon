@@ -4,6 +4,7 @@ import { validateTaskAcceptance } from '../lib/acceptance.mjs';
 import { signHmacAuthorization } from '../lib/authorizationHmac.mjs';
 import { parseManifest } from '../lib/manifest.mjs';
 import { parseTask } from '../lib/task.mjs';
+import { generateDeliveryKeyPair } from '../lib/extensions/delivery/hpke.mjs';
 
 const MANIFEST = parseManifest(`version: "1"
 name: node
@@ -97,4 +98,53 @@ test('acceptance reports malformed authorization input without throwing', () => 
   );
   assert.ok(result.errors.includes('missing input'));
   assert.ok(result.errors.some((error) => error.startsWith('invalid authorization binding:')));
+});
+
+test('acceptance rejects invalid delivery extension on task', () => {
+  const nodeKeys = generateDeliveryKeyPair();
+  const taskKeys = generateDeliveryKeyPair();
+  const manifest = parseManifest(`version: "1"
+name: node
+identity:
+  type: ed25519
+  public_key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+status: available
+capabilities:
+  - id: echo
+    input:
+      media_types: [text/plain]
+    output:
+      media_types: [text/plain]
+profiles:
+  github:
+    transport: issues
+extensions:
+  delivery:
+    scheme: hpke-x25519-hkdf-sha256-aes256gcm-v2
+    receive_public_key: ${nodeKeys.public_key}
+    transports:
+      - github-private-repo
+`);
+  const task = parseTask(`version: "1"
+request_id: req-delivery-bad
+capability_id: echo
+requester: github:a/b
+input:
+  media_type: text/plain
+  digest: sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+extensions:
+  delivery:
+    scheme: hpke-x25519-aes256gcm-v1
+    transport: github-private-repo
+    ephemeral_public_key: ${taskKeys.public_key}
+    github:
+      repo: github:a/inbox
+      input_path: inbox/req-delivery-bad/input.enc
+      output_path: inbox/req-delivery-bad/output.enc
+`);
+  const result = validateTaskAcceptance(task, { title: '[task] echo', state: 'open' }, {
+    manifest,
+    checkIssueMeta: true,
+  });
+  assert.ok(result.errors.some((error) => error === 'unsupported delivery.scheme: hpke-x25519-aes256gcm-v1'));
 });
