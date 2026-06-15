@@ -342,3 +342,23 @@ test('extension delivery fetch-input requires --output-file', async () => {
     (error) => error.message.includes('fetch-input requires --output-file'),
   );
 });
+
+test('extension delivery send-input parses --input-file', async () => {
+  await assert.rejects(
+    () => runCli([
+      'extension', 'delivery', 'send-input',
+      '--input-file', 'input.bin',
+    ]),
+    (error) => error.message.includes('send-input requires --task-file'),
+  );
+});
+
+test('extension delivery send-input rejects --input-file without a value', async () => {
+  await assert.rejects(
+    () => runCli([
+      'extension', 'delivery', 'send-input',
+      '--input-file',
+    ]),
+    (error) => error.message.includes('--input-file requires a value'),
+  );
+});

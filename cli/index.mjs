@@ -88,7 +88,7 @@ const VALUE_OPTIONS = new Set([
   '--extensions-file', '--extensions-json', '--transport', '--outbox-dir', '--extensions-out',
   '--input-upload-url', '--input-get-url', '--output-upload-url', '--output-get-url',
   '--github-repo', '--github-input-path', '--github-output-path', '--github-ref',
-  '--task-file', '--manifest-file', '--receive-public-key', '--outbox', '--delivery-key',
+  '--task-file', '--manifest-file', '--receive-public-key', '--input-file', '--outbox', '--delivery-key',
   '--proof-file', '--no-verify',
 ]);
 
@@ -341,6 +341,7 @@ function parseArgs(argv) {
     else if (arg === '--task-file') { i += 1; opts.taskFile = argv[i]; }
     else if (arg === '--manifest-file') { i += 1; opts.manifestFile = argv[i]; }
     else if (arg === '--receive-public-key') { i += 1; opts.receivePublicKey = argv[i]; }
+    else if (arg === '--input-file') { i += 1; opts.inputFile = argv[i]; }
     else if (arg === '--outbox') { i += 1; opts.outbox = argv[i]; }
     else if (arg === '--delivery-key') { i += 1; opts.deliveryKey = argv[i]; }
     else if (arg === '--proof-file') { i += 1; opts.proofFile = argv[i]; }

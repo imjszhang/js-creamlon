@@ -348,6 +348,11 @@ verifies digests, credentials, and Ed25519 proofs.
 
 ## Documentation
 
+- [User documentation](./docs/README.md)
+- [Quickstart](./docs/getting-started/quickstart.md)
+- [Caller guide](./docs/guides/caller.md)
+- [Node operator guide](./docs/guides/node-operator.md)
+- [Documentation versioning](./docs/operations/versioning.md)
 - [Protocol specification](./references/protocol.md)
 - [End-to-end walkthrough](./references/examples.md)
 - [Extensions](./extensions/README.md)
