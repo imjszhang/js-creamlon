@@ -880,6 +880,23 @@ test('GitHub discovery API searches the required topic and reads repository file
   }
 });
 
+test('optional GitHub repository files return null when missing', async () => {
+  installMockFetch(() => ({ status: 404, body: { message: 'not found' } }));
+  try {
+    const text = await getRepositoryFile(
+      'owner',
+      'node',
+      'trust/status.json',
+      'main',
+      null,
+      { optional: true },
+    );
+    assert.equal(text, null);
+  } finally {
+    resetFetch();
+  }
+});
+
 test('inspect reports an invalid public key without crashing', async () => {
   installMockFetch((url) => {
     if (url.includes('raw.githubusercontent.com')) {
