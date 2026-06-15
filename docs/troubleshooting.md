@@ -70,5 +70,10 @@ that `profiles.github.operator` names a user rather than an organization. Use
 one inbox repository per node; path prefixes in a shared repository do not
 limit collaborator write access.
 
+For fine-grained caller tokens, `caller inbox grant` and `revoke` require
+repository Administration write permission. Personal inbox repositories use
+the default `push` collaborator role; custom `maintain` or `admin` grants
+require an organization-owned inbox.
+
 For command-specific options, run `creamlon help <command>`. Report suspected
 security failures through the [security policy](../SECURITY.md).

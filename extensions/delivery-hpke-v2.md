@@ -62,7 +62,8 @@ repository owner is the fallback. Organization-owned nodes must declare an
 operator user because an organization cannot accept a collaborator invitation.
 
 The optional inbox path templates are caller defaults. They are not an access
-control boundary.
+control boundary. Templates must be relative, contain `{request_id}`, and may
+not contain traversal segments, backslashes, or control characters.
 
 ## Task extensions
 
@@ -126,8 +127,8 @@ inboxes:
     path_template:
       input: tasks/{request_id}/input.enc
       output: tasks/{request_id}/output.enc
-    grant: collaborator-push
-    granted_at: 2026-06-15T00:00:00.000Z
+    grant: invitation-pending-push
+    granted_at: null
 ```
 
 Initialize and authorize a node:
@@ -141,7 +142,19 @@ creamlon caller inbox check --node bob/echo-node
 `init` creates a private repository named
 `creamlon-inbox-{node-owner}-{node-repo}` under the caller account unless
 `--github-repo` overrides it. `grant` sends a collaborator invitation using
-the manifest operator or node owner. Invitations may require acceptance.
+the manifest operator or node owner. For a personal inbox repository, GitHub
+supports the default `push` collaborator role; `maintain` and `admin` are
+available only for organization-owned inbox repositories.
+
+New invitations remain `invitation-pending-*` with `granted_at: null` until the
+operator accepts them and `caller inbox check` observes effective write access.
+If caller and operator are the same user, the repository owner already has
+implicit admin access: `grant` is a no-op and that access cannot be revoked
+without changing repository ownership or transport.
+
+The caller token used by `grant` and `revoke` needs repository Administration
+write permission. The token used by `check` needs repository Metadata read
+permission.
 The first CLI version automates GitHub collaborator grants; GitHub App and
 fine-grained token policies remain administrator-managed alternatives.
 

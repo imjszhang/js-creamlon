@@ -46,6 +46,11 @@ creamlon caller inbox grant --node owner/repo
 creamlon caller inbox check --node owner/repo
 ```
 
+The node operator must accept a new collaborator invitation before `check`
+reports `ready: true`. If the caller and operator are the same GitHub user,
+`grant` detects the repository owner's implicit access and does not create an
+invitation.
+
 Then `creamlon extension delivery prepare owner/repo` defaults to
 `github-private-repo` and reads the inbox from
 `.creamlon/caller/inboxes.yaml`. Use a separate repository for each node
@@ -106,6 +111,7 @@ quality separately.
 - A `403` or `404` while the node fetches input or uploads output can mean its
   token was not granted access to the caller's private inbox.
 - Use `caller inbox revoke --node owner/repo` when standing access is no longer
-  appropriate.
+  appropriate. Repository owner access in a same-account setup cannot be
+  revoked.
 - Follow [troubleshooting](../troubleshooting.md) before exposing logs; logs can
   contain repository and task metadata.

@@ -84,6 +84,21 @@ test('validateTaskDelivery rejects removed hpke-v1 scheme', () => {
   assert.ok(errors.some((error) => error === 'unsupported delivery.scheme: hpke-x25519-aes256gcm-v1'));
 });
 
+test('validateTaskDelivery rejects unsafe GitHub artifact paths', () => {
+  const delivery = {
+    scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+    transport: 'github-private-repo',
+    ephemeral_public_key: generateDeliveryKeyPair().public_key,
+    github: {
+      repo: 'github:alice/deliveries',
+      input_path: '../private/input.enc',
+      output_path: 'tasks/req/output.enc',
+    },
+  };
+  assert.ok(validateTaskDelivery(delivery)
+    .some((error) => error.includes('input_path must be a safe relative path')));
+});
+
 test('presigned transport rejects HTTP, credentials, localhost, and private addresses', () => {
   assert.equal(validatePresignedUrl('https://storage.example/object'), 'https://storage.example/object');
   for (const url of [
@@ -165,6 +180,34 @@ test('delivery prepare defaults to a registered github inbox', async () => {
     'tasks/req-registry/input.enc',
   );
   assert.equal(output[0].inbox_registry, registryPath);
+});
+
+test('delivery prepare rejects unsafe GitHub path overrides', async () => {
+  const keys = generateDeliveryKeyPair();
+  await assert.rejects(
+    () => cmdExtensionDeliveryPrepare(
+      ['extension', 'delivery', 'prepare', 'bob/echo-node'],
+      {
+        githubRepo: 'github:alice/inbox',
+        githubInputPath: '../{request_id}/input.enc',
+      },
+      {
+        loadManifestContext: async () => ({
+          parsed: {
+            extensions: {
+              delivery: {
+                scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+                receive_public_key: keys.public_key,
+                transports: ['github-private-repo'],
+              },
+            },
+          },
+        }),
+        printJson: () => {},
+      },
+    ),
+    /safe relative path/,
+  );
 });
 
 test('presigned send-input and fetch-input verify digest', async () => {

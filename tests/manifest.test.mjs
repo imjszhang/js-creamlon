@@ -139,3 +139,22 @@ test('validateManifest accepts GitHub inbox path hints', () => {
   ));
   assert.deepEqual(validateManifest(parsed, { requireGithubProfile: true }), []);
 });
+
+test('validateManifest rejects unsafe GitHub inbox path hints', () => {
+  const keys = generateDeliveryKeyPair();
+  const parsed = parseManifest(YAML.replace(
+    'extensions:\n  mcp:',
+    `extensions:
+  delivery:
+    scheme: hpke-x25519-hkdf-sha256-aes256gcm-v2
+    receive_public_key: ${keys.public_key}
+    transports:
+      - github-private-repo
+    github:
+      inbox_path_template:
+        input: ../{request_id}/input.enc
+        output: tasks/{request_id}/output.enc
+  mcp:`,
+  ));
+  assert.ok(validateManifest(parsed).some((error) => error.includes('must be a relative path')));
+});

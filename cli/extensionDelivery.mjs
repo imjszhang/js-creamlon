@@ -12,6 +12,7 @@ import { sendInput, fetchInput } from '../lib/extensions/delivery/input.mjs';
 import { sendOutput, fetchOutput } from '../lib/extensions/delivery/output.mjs';
 import {
   parseManifestDelivery,
+  isSafeGithubArtifactPath,
   validateManifestDelivery,
   validateTaskDelivery,
 } from '../lib/extensions/delivery/schema.mjs';
@@ -139,6 +140,16 @@ export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManife
       `no inbox registered for ${slug}; run caller inbox init --node ${slug} `
         + 'or pass --github-repo',
     );
+  }
+  if (transport === 'github-private-repo') {
+    for (const [field, value] of [
+      ['input', github.input_path],
+      ['output', github.output_path],
+    ]) {
+      if (!value.includes('{request_id}') || !isSafeGithubArtifactPath(value)) {
+        throw usageError(`github ${field} path template must be a safe relative path containing {request_id}`);
+      }
+    }
   }
   if (transport === 'presigned-object-storage') {
     if (!opts.inputUploadUrl || !opts.outputUploadUrl || !opts.inputGetUrl || !opts.outputGetUrl) {

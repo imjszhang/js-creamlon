@@ -897,6 +897,27 @@ test('optional GitHub repository files return null when missing', async () => {
   }
 });
 
+test('GitHub repository file paths encode URL delimiters by segment', async () => {
+  const urls = [];
+  installMockFetch((url) => {
+    urls.push(url);
+    return {
+      status: 200,
+      body: {
+        type: 'file',
+        encoding: 'base64',
+        content: Buffer.from('ok').toString('base64'),
+      },
+    };
+  });
+  try {
+    await getRepositoryFile('owner', 'node', 'tasks/a?b#c%/input.enc', 'main');
+    assert.ok(urls[0].includes('/contents/tasks/a%3Fb%23c%25/input.enc?ref=main'));
+  } finally {
+    resetFetch();
+  }
+});
+
 test('inspect reports an invalid public key without crashing', async () => {
   installMockFetch((url) => {
     if (url.includes('raw.githubusercontent.com')) {

@@ -7,6 +7,9 @@
 - Added optional `profiles.github.operator` and delivery inbox path hints.
 - Made registry-backed `github-private-repo` the default delivery prepare
   transport, with presigned object storage retained as an escape hatch.
+- Hardened inbox management for same-account owners, pending invitations,
+  personal-repository collaborator roles, concurrent registry updates, strict
+  registry fields, and safe artifact paths.
 
 ## 0.5.0 - 2026-06-15
 
