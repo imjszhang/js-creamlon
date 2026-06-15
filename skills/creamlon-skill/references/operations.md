@@ -28,7 +28,7 @@ outbox files or print GET URLs, ephemeral private keys, or artifact plaintext.
 When a capability requires credential access, the node operator creates:
 
 ```bash
-npx --yes creamlon@0.4.0 credential create \
+npx --yes creamlon@0.4.1 credential create \
   --repo-path . \
   --capability-id <id>
 ```
@@ -47,7 +47,7 @@ Free nodes need no key map. To require HMAC authorization, declare
 `profiles.authorization.scheme: hmac-sha256` and generate a customer key:
 
 ```bash
-npx --yes creamlon@0.4.0 hmac-key-new \
+npx --yes creamlon@0.4.1 hmac-key-new \
   --key-id customer-1 \
   --out .creamlon/authorization.keys.json
 ```

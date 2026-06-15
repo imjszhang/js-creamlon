@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.1 - 2026-06-15
+
+- Added versioned user documentation for callers, node operators, security,
+  troubleshooting, and release maintenance.
+- Added documentation metadata and link checks to CI and npm publication.
+
+### Fixes
+
+- Fixed `extension delivery send-input --input-file` parsing so private
+  delivery input can be supplied through the documented CLI option.
+
 ## 0.4.0 - 2026-06-15
 
 - Added standards-based RFC 9180 HPKE delivery with X25519, HKDF-SHA256,

@@ -2,7 +2,7 @@
 title: Documentation versioning
 audience: users and maintainers
 status: current
-verified: 0.4.0
+verified: 0.4.1
 ---
 
 # Documentation versioning

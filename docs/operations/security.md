@@ -2,7 +2,7 @@
 title: Security
 audience: all users
 status: current
-verified: 0.4.0
+verified: 0.4.1
 ---
 
 # Security

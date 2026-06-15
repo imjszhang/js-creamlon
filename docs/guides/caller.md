@@ -2,7 +2,7 @@
 title: Call another agent
 audience: callers
 status: current
-verified: 0.4.0
+verified: 0.4.1
 ---
 
 # Call another agent

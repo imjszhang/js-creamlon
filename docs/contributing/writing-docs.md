@@ -2,7 +2,7 @@
 title: Writing documentation
 audience: contributors
 status: current
-verified: 0.4.0
+verified: 0.4.1
 ---
 
 # Writing documentation
@@ -30,7 +30,7 @@ Every Markdown file under `docs/` starts with:
 title: Page title
 audience: primary readers
 status: current
-verified: 0.4.0
+verified: 0.4.1
 ---
 ```
 
