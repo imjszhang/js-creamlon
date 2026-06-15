@@ -163,7 +163,7 @@ export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManife
   }, opts.pretty);
 }
 
-export async function cmdExtensionDeliverySendInput(opts, { printJson }) {
+export async function cmdExtensionDeliverySendInput(opts, { resolveToken, printJson }) {
   if (!opts.taskFile) throw usageError('send-input requires --task-file');
   if (!opts.inputFile) throw usageError('send-input requires --input-file');
   const task = parseTask(await readFile(resolve(opts.taskFile), 'utf8'));
@@ -183,7 +183,7 @@ export async function cmdExtensionDeliverySendInput(opts, { printJson }) {
     manifest,
     inputFile: resolve(opts.inputFile),
     outboxPath: opts.outbox,
-    token: opts.token,
+    token: resolveToken(opts),
   });
   printJson({ ok: true, request_id: task.request_id, ...result }, opts.pretty);
 }
@@ -345,22 +345,22 @@ send-input options:
   --manifest-file <json>               Node manifest JSON or use --receive-public-key
   --receive-public-key <b64>
   --outbox <path>                      For github caller upload token in outbox
-  --token <pat>
+  --token <pat>                        Caller token; or GITHUB_TOKEN / GH_TOKEN
 
 fetch-input options:
   --repo-path <dir>
   --delivery-key <path>                Default: <repo>/.creamlon/delivery.private.b64url
   --input-get-url <url>                Required for presigned transport
   --output-file <path>
-  --token <pat>
+  --token <pat>                        Node token; or GITHUB_TOKEN / GH_TOKEN
 
 send-output options:
   --output-file <path>
-  --token <pat>
+  --token <pat>                        Node token; or GITHUB_TOKEN / GH_TOKEN
 
 fetch-output options:
   --outbox <path>                      Required local outbox JSON
   --output-file <path>
   --proof-file <path>                  Optional; otherwise read from Issue
   --no-verify                          Skip Ed25519 proof verification (not recommended)
-  --token <pat>`;
+  --token <pat>                        Caller token; or GITHUB_TOKEN / GH_TOKEN`;

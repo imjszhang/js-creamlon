@@ -38,6 +38,38 @@ Task fields and workflows are identical to
 scheme above. New `extension delivery prepare` operations use the scheme
 advertised by the node.
 
+## Cross-account operation
+
+For `github-private-repo`, the caller owns the private inbox repository and
+must grant the node operator access before submitting a task. A same-account
+test does not exercise this requirement because one token can already access
+both repositories.
+
+| Command | Actor token | Required GitHub access |
+| --- | --- | --- |
+| `extension delivery send-input` | Caller | Write the caller's private inbox |
+| `submit` | Caller | Open Issues in the node repository |
+| `extension delivery fetch-input` | Node | Read the caller's private inbox |
+| `deliver` | Node | Comment on and close Issues in the node repository |
+| `extension delivery send-output` | Node | Write the caller's private inbox |
+| `extension delivery fetch-output` | Caller | Read the caller's private inbox |
+
+Grant the node identity repository contents read/write access through an
+appropriate collaborator role, fine-grained personal access token, or GitHub
+App installation. Scope access to the inbox repository and required branch.
+GitHub can return `404` instead of `403` when a token cannot see a private
+repository.
+
+The public task Issue still exposes the inbox repository slug, branch, artifact
+paths, request ID, caller ephemeral public key, and input digest. Artifact
+plaintext and ciphertext remain outside the Issue, but observers can correlate
+these public identifiers. Use opaque paths where practical.
+
+Prefer `presigned-object-storage` when caller and node are owned by different
+accounts or organizations and standing cross-repository access is undesirable.
+Its GET URLs remain outside the public Issue and should be delivered through a
+private channel.
+
 ## Ciphertext envelope
 
 ```json

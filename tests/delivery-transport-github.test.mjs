@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -9,6 +9,8 @@ import { sendInput, fetchInput } from '../lib/extensions/delivery/input.mjs';
 import { sendOutput, fetchOutput } from '../lib/extensions/delivery/output.mjs';
 import { generateDeliveryKeyPair } from '../lib/extensions/delivery/hpke.mjs';
 import { hashBuffer } from '../lib/hash.mjs';
+
+after(() => setGithubFetch(globalThis.fetch));
 
 test('github transport uploads and fetches encrypted artifacts', async () => {
   const nodeKeys = generateDeliveryKeyPair();
@@ -93,4 +95,67 @@ test('github transport uploads and fetches encrypted artifacts', async () => {
   assert.equal(await readFile(fetchedOutput, 'utf8'), outputText);
   assert.deepEqual(putBranches, ['delivery-branch', 'delivery-branch']);
   assert.equal(prepared.extensions.delivery.github.ref, 'delivery-branch');
+});
+
+test('github transport explains cross-account private repository access failures', async () => {
+  const nodeKeys = generateDeliveryKeyPair();
+  const task = {
+    version: '1',
+    request_id: 'req-cross-account',
+    capability_id: 'code_review',
+    requester: 'github:alice/caller',
+    input: { media_type: 'application/octet-stream', digest: hashBuffer(Buffer.from('input')) },
+    extensions: {
+      delivery: {
+        scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+        transport: 'github-private-repo',
+        ephemeral_public_key: nodeKeys.public_key,
+        github: {
+          repo: 'github:alice/delivery-inbox',
+          ref: 'main',
+          input_path: 'inbox/req-cross-account/input.enc',
+          output_path: 'inbox/req-cross-account/output.enc',
+        },
+      },
+    },
+  };
+  setGithubFetch(async () => ({
+    ok: false,
+    status: 404,
+    text: async () => JSON.stringify({ message: 'Not Found' }),
+  }));
+
+  await assert.rejects(
+    () => fetchInput({
+      task,
+      outputFile: join(tmpdir(), 'cross-account-input.bin'),
+      nodePrivateKey: nodeKeys.private_key,
+      token: 'node-token',
+    }),
+    (error) => {
+      assert.equal(error.status, 404);
+      assert.match(error.message, /cannot read delivery artifact/);
+      assert.match(error.message, /github:alice\/delivery-inbox/);
+      assert.match(error.message, /token has read access/);
+      return true;
+    },
+  );
+
+  const outputFile = join(tmpdir(), 'cross-account-output.bin');
+  await writeFile(outputFile, 'output');
+  setGithubFetch(async () => ({
+    ok: false,
+    status: 403,
+    text: async () => JSON.stringify({ message: 'Forbidden' }),
+  }));
+  await assert.rejects(
+    () => sendOutput({ task, outputFile, token: 'node-token' }),
+    (error) => {
+      assert.equal(error.status, 403);
+      assert.match(error.message, /cannot write delivery artifact/);
+      assert.match(error.message, /github:alice\/delivery-inbox/);
+      assert.match(error.message, /token has write access/);
+      return true;
+    },
+  );
 });

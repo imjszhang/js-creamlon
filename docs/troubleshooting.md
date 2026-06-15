@@ -59,5 +59,10 @@ Confirm both peers use the advertised delivery scheme and transport. Keep
 outbox state and private URLs local. `delivery-hpke-v1` is legacy;
 `delivery-hpke-v2` is the current RFC 9180 scheme.
 
+For `github-private-repo`, a `403` or `404` during `fetch-input` or
+`send-output` usually means the node token cannot access the caller-owned
+private inbox. Grant that token repository contents read/write access, or use
+`presigned-object-storage` to avoid standing cross-repository permissions.
+
 For command-specific options, run `creamlon help <command>`. Report suspected
 security failures through the [security policy](../SECURITY.md).

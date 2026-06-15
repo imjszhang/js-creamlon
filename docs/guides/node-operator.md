@@ -60,6 +60,11 @@ creamlon watch owner/repo \
 Execute only tasks reported as valid. Reject malformed, unauthorized, expired,
 or unsupported tasks without signing a delivery proof.
 
+For a `github-private-repo` delivery task, `fetch-input` and `send-output` use
+the node operator's `--token`, `GITHUB_TOKEN`, or `GH_TOKEN`. The caller must
+grant that token read/write contents access to the private inbox repository
+named in the task extension. GitHub may report missing access as `404`.
+
 ## 5. Deliver a result
 
 ```bash

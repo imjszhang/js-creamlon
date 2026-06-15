@@ -25,6 +25,12 @@ Use exact secrets only through private channels and local files with restricted
 permissions. Prefer digest-based task inputs and encrypted delivery when task
 content must not be public.
 
+Encrypted delivery does not hide all metadata. A public task using
+`github-private-repo` exposes the private inbox repository slug, branch,
+artifact paths, request ID, ephemeral public key, and input digest. Use opaque
+paths and choose `presigned-object-storage` when this correlation or standing
+cross-account repository access is unacceptable.
+
 ## Verify before accepting
 
 Callers should use `fetch-proof --verify` and reject signature, author,

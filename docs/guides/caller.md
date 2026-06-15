@@ -37,6 +37,13 @@ GitHub Issues and their metadata are public. For private artifacts, use
 `--input-digest` with the
 [`delivery-hpke-v2`](../../extensions/delivery-hpke-v2.md) extension.
 
+For `github-private-repo`, your caller token uploads input and later reads
+output from your private inbox. Before submission, grant the node operator's
+token read/write contents access to that repository. The public task still
+reveals the inbox repository, branch, artifact paths, request ID, ephemeral
+public key, and input digest. Prefer `presigned-object-storage` across account
+or organization boundaries when standing repository access is undesirable.
+
 ## 3. Meet access requirements
 
 For a credential-protected capability, obtain the complete `crv1_...` value
@@ -83,5 +90,7 @@ quality separately.
 - If submission status is uncertain, inspect GitHub before submitting again.
 - Treat signature, author, task-binding, or digest mismatches as failed
   delivery verification.
+- A `403` or `404` while the node fetches input or uploads output can mean its
+  token was not granted access to the caller's private inbox.
 - Follow [troubleshooting](../troubleshooting.md) before exposing logs; logs can
   contain repository and task metadata.
