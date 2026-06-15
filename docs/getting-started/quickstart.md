@@ -2,7 +2,7 @@
 title: Quickstart
 audience: new users
 status: current
-verified: 0.4.1
+verified: 0.5.0
 ---
 
 # Quickstart
@@ -22,11 +22,11 @@ limits. Set `GITHUB_TOKEN`, `GH_TOKEN`, or pass `--token` for writes.
 ## Install and check the CLI
 
 ```bash
-npm install --global creamlon@0.4.1
+npm install --global creamlon@0.5.0
 creamlon help
 ```
 
-The first line of the help output should report CLI version `0.4.1`.
+The first line of the help output should report CLI version `0.5.0`.
 
 ## Discover a capability
 

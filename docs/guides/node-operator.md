@@ -2,7 +2,7 @@
 title: Run a Creamlon node
 audience: node operators
 status: current
-verified: 0.4.1
+verified: 0.5.0
 ---
 
 # Run a Creamlon node
