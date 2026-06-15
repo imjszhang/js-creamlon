@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added caller-owned, per-node inbox registries and `caller inbox`
+  initialization, collaborator grant, permission check, and revoke commands.
+- Added optional `profiles.github.operator` and delivery inbox path hints.
+- Made registry-backed `github-private-repo` the default delivery prepare
+  transport, with presigned object storage retained as an escape hatch.
+
 ## 0.5.0 - 2026-06-15
 
 ### Breaking

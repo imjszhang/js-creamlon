@@ -24,13 +24,21 @@ must use the raw 32-byte X25519 public keys inside the RFC 9180 KEM context.
 ## Node manifest
 
 ```yaml
+profiles:
+  github:
+    transport: issues
+    operator: bob
 extensions:
   delivery:
     scheme: hpke-x25519-hkdf-sha256-aes256gcm-v2
     receive_public_key: "<base64url-x25519-spki-der>"
     transports:
-      - presigned-object-storage
       - github-private-repo
+      - presigned-object-storage
+    github:
+      inbox_path_template:
+        input: tasks/{request_id}/input.enc
+        output: tasks/{request_id}/output.enc
     presigned_hosts:
       - storage.example.com
 ```
@@ -47,6 +55,14 @@ Keep `delivery.private.b64url` local.
 `presigned_hosts` is required when using `presigned-object-storage`. The node
 only uploads task output to credential-free HTTPS URLs whose exact hostname is
 listed. Redirects, localhost, and literal private addresses are rejected.
+
+`profiles.github.operator` identifies the GitHub user the caller should invite
+to a private inbox. It is optional for user-owned node repositories, where the
+repository owner is the fallback. Organization-owned nodes must declare an
+operator user because an organization cannot accept a collaborator invitation.
+
+The optional inbox path templates are caller defaults. They are not an access
+control boundary.
 
 ## Task extensions
 
@@ -89,6 +105,61 @@ extensions:
 
 The caller repository is private. The node GitHub token needs read access to
 input and write access to output paths.
+
+This is the default GitHub-profile transport. Use one private inbox repository
+per node operator so repository write access does not allow one operator to
+overwrite another operator's encrypted task files.
+
+### Caller inbox registry
+
+The caller stores local inbox mappings in
+`.creamlon/caller/inboxes.yaml`:
+
+```yaml
+version: "1"
+inboxes:
+  - node: bob/echo-node
+    operator: bob
+    repo: github:alice/creamlon-inbox-bob-echo-node
+    ref: main
+    trust: trusted
+    path_template:
+      input: tasks/{request_id}/input.enc
+      output: tasks/{request_id}/output.enc
+    grant: collaborator-push
+    granted_at: 2026-06-15T00:00:00.000Z
+```
+
+Initialize and authorize a node:
+
+```bash
+creamlon caller inbox init --node bob/echo-node
+creamlon caller inbox grant --node bob/echo-node
+creamlon caller inbox check --node bob/echo-node
+```
+
+`init` creates a private repository named
+`creamlon-inbox-{node-owner}-{node-repo}` under the caller account unless
+`--github-repo` overrides it. `grant` sends a collaborator invitation using
+the manifest operator or node owner. Invitations may require acceptance.
+The first CLI version automates GitHub collaborator grants; GitHub App and
+fine-grained token policies remain administrator-managed alternatives.
+
+`extension delivery prepare bob/echo-node` defaults to
+`github-private-repo` and resolves repository, branch, and path templates from
+this registry. Explicit CLI options override registry values.
+
+Trust levels have local caller semantics:
+
+| Trust | Behavior |
+| --- | --- |
+| `trusted` | Standing per-node inbox access is allowed |
+| `trial` | Access is allowed but callers should review and revoke it after use |
+| `blocked` | `grant` and registry-backed `prepare` are rejected |
+
+A single inbox with node-specific paths is an operational layout only. GitHub
+repository permissions are repository-wide, so paths do not isolate mutually
+untrusted operators.
 
 ## Local outbox
 
@@ -164,10 +235,15 @@ paths, request ID, caller ephemeral public key, and input digest. Artifact
 plaintext and ciphertext remain outside the Issue, but observers can correlate
 these public identifiers. Use opaque paths where practical.
 
-Prefer `presigned-object-storage` when caller and node are owned by different
-accounts or organizations and standing cross-repository access is undesirable.
-Its GET URLs remain outside the public Issue and should be delivered through a
-private channel.
+Use `presigned-object-storage` as an escape hatch for trial nodes, environments
+where collaborator access cannot be established, or deployments that reject
+standing cross-repository permissions. Its GET URLs remain outside the public
+Issue and should be delivered through a private channel.
+
+The current delivery object binds one input digest and one output digest.
+Different artifact kinds are represented by capability media types. Multiple
+output artifacts require a future extension and are not implied by the inbox
+registry.
 
 ## Ciphertext envelope
 

@@ -17,6 +17,8 @@ import {
   validateTaskDelivery,
 } from '../lib/extensions/delivery/schema.mjs';
 import { serializeTask } from '../lib/task.mjs';
+import { cmdExtensionDeliveryPrepare } from '../cli/extensionDelivery.mjs';
+import { writeInboxRegistry } from '../lib/inboxRegistry.mjs';
 
 test('prepare writes outbox and task extensions for presigned transport', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-outbox-'));
@@ -110,6 +112,59 @@ test('prepare includes github ref in task extensions', async () => {
     outboxDir: await mkdtemp(join(tmpdir(), 'creamlon-outbox-')),
   });
   assert.equal(result.extensions.delivery.github.ref, 'feature');
+});
+
+test('delivery prepare defaults to a registered github inbox', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-registry-prepare-'));
+  const registryPath = join(dir, 'inboxes.yaml');
+  await writeInboxRegistry(registryPath, {
+    version: '1',
+    inboxes: [{
+      node: 'bob/echo-node',
+      operator: 'bob',
+      repo: 'github:alice/creamlon-inbox-bob-echo-node',
+      ref: 'main',
+      trust: 'trusted',
+      path_template: {
+        input: 'tasks/{request_id}/input.enc',
+        output: 'tasks/{request_id}/output.enc',
+      },
+    }],
+  });
+  const keys = generateDeliveryKeyPair();
+  const output = [];
+  await cmdExtensionDeliveryPrepare(
+    ['extension', 'delivery', 'prepare', 'bob/echo-node'],
+    {
+      registry: registryPath,
+      requestId: 'req-registry',
+      outboxDir: join(dir, 'outbox'),
+    },
+    {
+      loadManifestContext: async () => ({
+        parsed: {
+          extensions: {
+            delivery: {
+              scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+              receive_public_key: keys.public_key,
+              transports: ['github-private-repo'],
+            },
+          },
+        },
+      }),
+      printJson: (value) => output.push(value),
+    },
+  );
+  assert.equal(output[0].extensions.delivery.transport, 'github-private-repo');
+  assert.equal(
+    output[0].extensions.delivery.github.repo,
+    'github:alice/creamlon-inbox-bob-echo-node',
+  );
+  assert.equal(
+    output[0].extensions.delivery.github.input_path,
+    'tasks/req-registry/input.enc',
+  );
+  assert.equal(output[0].inbox_registry, registryPath);
 });
 
 test('presigned send-input and fetch-input verify digest', async () => {

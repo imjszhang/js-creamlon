@@ -15,6 +15,11 @@ import {
   validateManifestDelivery,
   validateTaskDelivery,
 } from '../lib/extensions/delivery/schema.mjs';
+import {
+  DEFAULT_INBOX_REGISTRY,
+  findInbox,
+  readInboxRegistry,
+} from '../lib/inboxRegistry.mjs';
 
 function usageError(msg) {
   const err = new Error(msg);
@@ -94,7 +99,7 @@ export async function cmdExtensionDeliveryKeygen(opts) {
 export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManifestContext, printJson }) {
   const slug = positional[3];
   if (!slug) throw usageError('extension delivery prepare requires <owner/repo>');
-  if (!opts.transport) throw usageError('extension delivery prepare requires --transport');
+  const transport = opts.transport || 'github-private-repo';
   const { parsed } = await loadManifestContext(slug, opts.ref);
   const manifestDelivery = parseManifestDelivery(parsed);
   const manifestErrors = validateManifestDelivery(manifestDelivery);
@@ -102,22 +107,40 @@ export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManife
   if (!manifestDelivery?.receive_public_key) {
     fail('node manifest missing extensions.delivery.receive_public_key');
   }
-  if (manifestDelivery?.transports && !manifestDelivery.transports.includes(opts.transport)) {
-    fail(`node does not advertise transport: ${opts.transport}`);
+  if (manifestDelivery?.transports && !manifestDelivery.transports.includes(transport)) {
+    fail(`node does not advertise transport: ${transport}`);
   }
 
-  const github = opts.transport === 'github-private-repo'
+  const registryPath = opts.registry || DEFAULT_INBOX_REGISTRY;
+  const registry = transport === 'github-private-repo'
+    ? await readInboxRegistry(registryPath)
+    : null;
+  const registeredInbox = registry ? findInbox(registry, slug) : null;
+  if (registeredInbox?.trust === 'blocked') {
+    fail(`inbox trust level blocks delivery to ${slug}`, 4);
+  }
+  const manifestTemplates = manifestDelivery?.github?.inbox_path_template;
+  const github = transport === 'github-private-repo'
     ? {
-        repo: opts.githubRepo,
-        input_path: opts.githubInputPath || 'inbox/{request_id}/input.enc',
-        output_path: opts.githubOutputPath || 'inbox/{request_id}/output.enc',
-        ref: opts.githubRef || 'main',
+        repo: opts.githubRepo || registeredInbox?.repo,
+        input_path: opts.githubInputPath
+          || registeredInbox?.path_template?.input
+          || manifestTemplates?.input
+          || 'tasks/{request_id}/input.enc',
+        output_path: opts.githubOutputPath
+          || registeredInbox?.path_template?.output
+          || manifestTemplates?.output
+          || 'tasks/{request_id}/output.enc',
+        ref: opts.githubRef || registeredInbox?.ref || 'main',
       }
     : null;
-  if (opts.transport === 'github-private-repo' && !opts.githubRepo) {
-    throw usageError('github transport requires --github-repo github:owner/repo');
+  if (transport === 'github-private-repo' && !github.repo) {
+    throw usageError(
+      `no inbox registered for ${slug}; run caller inbox init --node ${slug} `
+        + 'or pass --github-repo',
+    );
   }
-  if (opts.transport === 'presigned-object-storage') {
+  if (transport === 'presigned-object-storage') {
     if (!opts.inputUploadUrl || !opts.outputUploadUrl || !opts.inputGetUrl || !opts.outputGetUrl) {
       throw usageError('presigned transport requires --input-upload-url, --input-get-url, --output-upload-url, --output-get-url');
     }
@@ -140,7 +163,7 @@ export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManife
   }
 
   const result = await prepareDelivery({
-    transport: opts.transport,
+    transport,
     requestId: opts.requestId,
     inputUploadUrl: opts.inputUploadUrl,
     inputGetUrl: opts.inputGetUrl,
@@ -160,6 +183,7 @@ export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManife
     extensions_file: extensionsPath,
     outbox_path: result.outbox_path,
     node_receive_public_key: manifestDelivery?.receive_public_key || null,
+    inbox_registry: registeredInbox ? registryPath : null,
   }, opts.pretty);
 }
 
@@ -328,15 +352,17 @@ Commands:
   fetch-output <owner/repo> <issue#>   Decrypt output and verify proof digest
 
 prepare options:
-  --transport <id>                     presigned-object-storage or github-private-repo
+  --transport <id>                     Default: github-private-repo
+                                        Alternative: presigned-object-storage
   --request-id <uuid>
+  --registry <path>                    Default: .creamlon/caller/inboxes.yaml
   --outbox-dir <path>                  Default: .creamlon/outbox
   --extensions-out <path>
   --input-upload-url / --input-get-url
   --output-upload-url / --output-get-url
   --github-repo github:owner/repo
-  --github-input-path <template>       Default: inbox/{request_id}/input.enc
-  --github-output-path <template>      Default: inbox/{request_id}/output.enc
+  --github-input-path <template>       Default: tasks/{request_id}/input.enc
+  --github-output-path <template>      Default: tasks/{request_id}/output.enc
   --github-ref <branch>
 
 send-input options:

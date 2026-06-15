@@ -34,6 +34,15 @@ test('parseManifest reads the version 1 manifest', () => {
   assert.deepEqual(validateManifest(parsed, { requireGithubProfile: true }), []);
 });
 
+test('manifest accepts an explicit GitHub operator', () => {
+  const parsed = parseManifest(YAML.replace(
+    '    transport: issues',
+    '    transport: issues\n    operator: bob-agent',
+  ));
+  assert.equal(parsed.profiles.github.operator, 'bob-agent');
+  assert.deepEqual(validateManifest(parsed, { requireGithubProfile: true }), []);
+});
+
 test('manifest rejects old wrapped schema and unknown core fields', () => {
   const old = parseManifest(`name: old
 creamlon:
@@ -107,6 +116,25 @@ test('validateManifest accepts a valid delivery extension', () => {
     receive_public_key: ${keys.public_key}
     transports:
       - github-private-repo
+  mcp:`,
+  ));
+  assert.deepEqual(validateManifest(parsed, { requireGithubProfile: true }), []);
+});
+
+test('validateManifest accepts GitHub inbox path hints', () => {
+  const keys = generateDeliveryKeyPair();
+  const parsed = parseManifest(YAML.replace(
+    'extensions:\n  mcp:',
+    `extensions:
+  delivery:
+    scheme: hpke-x25519-hkdf-sha256-aes256gcm-v2
+    receive_public_key: ${keys.public_key}
+    transports:
+      - github-private-repo
+    github:
+      inbox_path_template:
+        input: tasks/{request_id}/input.enc
+        output: tasks/{request_id}/output.enc
   mcp:`,
   ));
   assert.deepEqual(validateManifest(parsed, { requireGithubProfile: true }), []);

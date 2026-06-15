@@ -338,13 +338,18 @@ CLI helpers:
 
 ```bash
 creamlon extension delivery keygen --out .creamlon
-creamlon extension delivery prepare owner/repo --transport presigned-object-storage ...
+creamlon caller inbox init --node owner/repo
+creamlon caller inbox grant --node owner/repo
+creamlon extension delivery prepare owner/repo
 creamlon extension delivery send-input --task-file task.yaml --input-file input.bin
 creamlon extension delivery fetch-output owner/repo <issue#> --outbox .creamlon/outbox/<id>.json
 ```
 
-Artifact transport and external payment remain extension concerns. Core still
-verifies digests, credentials, and Ed25519 proofs.
+GitHub private repositories are the default delivery transport. Use a separate
+caller-owned inbox per node operator. Presigned object storage remains an
+escape hatch when standing GitHub access is undesirable. Artifact transport
+and external payment remain extension concerns. Core still verifies digests,
+credentials, and Ed25519 proofs.
 
 ## Documentation
 

@@ -362,3 +362,14 @@ test('extension delivery send-input rejects --input-file without a value', async
     (error) => error.message.includes('--input-file requires a value'),
   );
 });
+
+test('caller inbox command parses node and registry options', async () => {
+  await assert.rejects(
+    () => runCli([
+      'caller', 'inbox', 'init',
+      '--node', 'bob/echo-node',
+      '--registry', '.creamlon/test-inboxes.yaml',
+    ]),
+    (error) => error.message.includes('requires GITHUB_TOKEN, GH_TOKEN, or --token'),
+  );
+});

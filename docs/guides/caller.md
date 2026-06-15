@@ -38,11 +38,24 @@ GitHub Issues and their metadata are public. For private artifacts, use
 [`delivery-hpke-v2`](../../extensions/delivery-hpke-v2.md) extension.
 
 For `github-private-repo`, your caller token uploads input and later reads
-output from your private inbox. Before submission, grant the node operator's
-token read/write contents access to that repository. The public task still
-reveals the inbox repository, branch, artifact paths, request ID, ephemeral
-public key, and input digest. Prefer `presigned-object-storage` across account
-or organization boundaries when standing repository access is undesirable.
+output from a private per-node inbox. Set it up once:
+
+```bash
+creamlon caller inbox init --node owner/repo
+creamlon caller inbox grant --node owner/repo
+creamlon caller inbox check --node owner/repo
+```
+
+Then `creamlon extension delivery prepare owner/repo` defaults to
+`github-private-repo` and reads the inbox from
+`.creamlon/caller/inboxes.yaml`. Use a separate repository for each node
+operator. Node-specific paths inside one shared repository do not provide
+GitHub ACL isolation.
+
+The public task still reveals the inbox repository, branch, artifact paths,
+request ID, ephemeral public key, and input digest. Use
+`presigned-object-storage` for trial nodes or when standing repository access
+is undesirable.
 
 ## 3. Meet access requirements
 
@@ -92,5 +105,7 @@ quality separately.
   delivery verification.
 - A `403` or `404` while the node fetches input or uploads output can mean its
   token was not granted access to the caller's private inbox.
+- Use `caller inbox revoke --node owner/repo` when standing access is no longer
+  appropriate.
 - Follow [troubleshooting](../troubleshooting.md) before exposing logs; logs can
   contain repository and task metadata.

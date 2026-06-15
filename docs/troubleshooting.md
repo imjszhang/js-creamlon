@@ -64,5 +64,11 @@ For `github-private-repo`, a `403` or `404` during `fetch-input` or
 private inbox. Grant that token repository contents read/write access, or use
 `presigned-object-storage` to avoid standing cross-repository permissions.
 
+Run `creamlon caller inbox check --node owner/repo` with the caller token. If
+the operator permission is missing, confirm the invitation was accepted and
+that `profiles.github.operator` names a user rather than an organization. Use
+one inbox repository per node; path prefixes in a shared repository do not
+limit collaborator write access.
+
 For command-specific options, run `creamlon help <command>`. Report suspected
 security failures through the [security policy](../SECURITY.md).

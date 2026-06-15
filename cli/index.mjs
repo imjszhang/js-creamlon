@@ -70,6 +70,7 @@ import {
   validateRedemption,
 } from '../lib/credential.mjs';
 import { cmdExtension, EXTENSION_DELIVERY_HELP } from './extensionDelivery.mjs';
+import { cmdCaller, CALLER_HELP } from './callerInbox.mjs';
 import { parseManifestDelivery } from '../lib/extensions/delivery/schema.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -90,6 +91,7 @@ const VALUE_OPTIONS = new Set([
   '--github-repo', '--github-input-path', '--github-output-path', '--github-ref',
   '--task-file', '--manifest-file', '--receive-public-key', '--input-file', '--outbox', '--delivery-key',
   '--proof-file', '--no-verify',
+  '--node', '--registry', '--operator', '--trust', '--permission',
 ]);
 
 const HELP = {
@@ -119,10 +121,11 @@ Commands:
   audit [--repo-path <dir>]          Audit local proofs.log
   status [--repo-path <dir>]         Write public node health status
   init <dir> [--name <name>]        Scaffold agent node from template
+  caller inbox <cmd>                Manage private per-node caller inboxes
   extension delivery <cmd>          Private artifact delivery helpers
   help [command]                    Show help
 
-submit/deliver/reject require GITHUB_TOKEN, GH_TOKEN, or --token.
+submit/deliver/reject and caller inbox management require GITHUB_TOKEN, GH_TOKEN, or --token.
 Public discover/watch/fetch-proof reads can run anonymously with lower rate limits.
 Run "creamlon help <command>" for details.`,
   keygen: `creamlon keygen [--out <dir>]
@@ -154,6 +157,7 @@ Options:
   --pretty               Pretty-print JSON
 
 The complete credential is displayed only by create. Keep it secret.`,
+  caller: CALLER_HELP,
   hash: `creamlon hash <text>
 creamlon hash --file <path>
 
@@ -346,6 +350,11 @@ function parseArgs(argv) {
     else if (arg === '--delivery-key') { i += 1; opts.deliveryKey = argv[i]; }
     else if (arg === '--proof-file') { i += 1; opts.proofFile = argv[i]; }
     else if (arg === '--no-verify') opts.noVerify = true;
+    else if (arg === '--node') { i += 1; opts.node = argv[i]; }
+    else if (arg === '--registry') { i += 1; opts.registry = argv[i]; }
+    else if (arg === '--operator') { i += 1; opts.operator = argv[i]; }
+    else if (arg === '--trust') { i += 1; opts.trust = argv[i]; }
+    else if (arg === '--permission') { i += 1; opts.permission = argv[i]; }
     else if (arg.startsWith('--')) throw usageError(`unknown option: ${arg}`);
     else positional.push(arg);
   }
@@ -1323,6 +1332,7 @@ export async function runCli(argv) {
       : topic === 'fetch-proof' ? 'fetchProof'
         : topic === 'key-rotate' ? 'keyRotate'
           : topic === 'extension' && rest[1] === 'delivery' ? 'extensionDelivery'
+            : topic === 'caller' ? 'caller'
             : topic;
     console.log(helpKey && HELP[helpKey] ? HELP[helpKey] : HELP.main);
     return;
@@ -1382,6 +1392,13 @@ export async function runCli(argv) {
       break;
     case 'init':
       await cmdInit(positional, opts);
+      break;
+    case 'caller':
+      await cmdCaller(positional, opts, {
+        loadManifestContext,
+        resolveToken,
+        printJson,
+      });
       break;
     case 'extension':
       await cmdExtension(positional, opts, {

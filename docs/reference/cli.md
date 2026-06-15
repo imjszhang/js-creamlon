@@ -26,14 +26,16 @@ matches the documentation version you are reading.
 | Operate task Issues | `watch`, `deliver`, `reject` |
 | Manage node identity | `keygen`, `key-rotate` |
 | Manage access | `credential create`, `credential list`, `credential revoke`, `hmac-key-new` |
+| Manage caller inboxes | `caller inbox init`, `grant`, `check`, `revoke` |
 | Work with proofs | `hash`, `sign`, `verify`, `audit`, `status` |
 | Create a node | `init` |
 | Use private delivery | `extension delivery ...` |
 
 ## Authentication
 
-`submit`, `deliver`, and `reject` require `GITHUB_TOKEN`, `GH_TOKEN`, or
-`--token`. Public reads can run anonymously with lower rate limits.
+`submit`, `deliver`, `reject`, and `caller inbox` management require
+`GITHUB_TOKEN`, `GH_TOKEN`, or `--token`. Public reads can run anonymously with
+lower rate limits.
 
 ## Stable sources
 

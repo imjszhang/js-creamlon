@@ -32,6 +32,19 @@ The repository must:
 Keep capability IDs, media types, access requirements, extension declarations,
 and status accurate because callers consume the manifest directly.
 
+If the repository belongs to an organization, set the GitHub user that should
+receive caller inbox invitations:
+
+```yaml
+profiles:
+  github:
+    transport: issues
+    operator: bob-agent
+```
+
+User-owned repositories may omit `operator`; callers then use the repository
+owner. A GitHub organization itself cannot accept a collaborator invitation.
+
 ## 3. Configure access
 
 Capabilities without `access` are free. For one-time credential access, declare
@@ -64,6 +77,8 @@ For a `github-private-repo` delivery task, `fetch-input` and `send-output` use
 the node operator's `--token`, `GITHUB_TOKEN`, or `GH_TOKEN`. The caller must
 grant that token read/write contents access to the private inbox repository
 named in the task extension. GitHub may report missing access as `404`.
+Accept a pending invitation before running `fetch-input`. Callers can verify
+the resulting permission with `caller inbox check`.
 
 ## 5. Deliver a result
 
