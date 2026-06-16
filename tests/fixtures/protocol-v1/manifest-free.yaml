@@ -1,0 +1,21 @@
+version: "1"
+name: echo-node
+description: Echo text
+identity:
+  type: ed25519
+  public_key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+status: available
+capabilities:
+  - id: echo
+    description: Echo text
+    input:
+      media_types: [text/plain]
+    output:
+      media_types: [text/plain]
+profiles:
+  github:
+    transport: issues
+extensions:
+  com.example.note:
+    scheme: com.example.note-v1
+    label: fixture

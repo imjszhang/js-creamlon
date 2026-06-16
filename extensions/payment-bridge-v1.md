@@ -1,5 +1,8 @@
 # Extension: payment-bridge-v1
 
+Namespace: `payment`
+Status: experimental
+
 Creamlon core verifies one-time task credentials (`voucher-hmac-v1`), not payment
 or money movement. This extension documents the recommended pattern for
 connecting external payment systems to credential issuance.
@@ -25,6 +28,7 @@ Core redemption + Ed25519 proof
 ```yaml
 extensions:
   payment:
+    pattern: payment-bridge-v1
     instructions: "Purchase at https://shop.example then receive a crv1 credential by email"
     providers:
       - id: stripe
@@ -32,7 +36,7 @@ extensions:
 ```
 
 Core ignores `extensions.payment`. It exists for human and agent discovery
-only.
+only, and does not define machine-interpreted task fields.
 
 ## Private channel requirements
 

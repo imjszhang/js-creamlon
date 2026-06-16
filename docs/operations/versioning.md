@@ -10,6 +10,11 @@ verified: 0.6.0
 Creamlon documentation follows the npm package version. It does not have a
 separate version number.
 
+The npm package version is not the same as the wire protocol version. Public
+version 1 manifests, tasks, proofs, canonical signing payloads, and trust logs
+have a narrower compatibility boundary described in
+[Protocol compatibility](./protocol-compatibility.md).
+
 ## Sources by lifecycle
 
 | Source | Meaning |
@@ -41,6 +46,8 @@ During the `0.x` series:
 - Minor releases can contain user-visible breaking changes.
 - Patch releases should remain compatible unless a security fix requires
   otherwise.
+- Version 1 wire behavior should remain compatible unless a security fix
+  requires a new scheme or protocol version.
 - Breaking changes require changelog and migration notes.
 - Experimental pages must state instability and enabling conditions.
 - Deprecated behavior remains documented until its replacement and removal
