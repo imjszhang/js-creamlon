@@ -12,6 +12,7 @@
     "check:docs": "node scripts/check-docs.mjs",
     "check:docs:release": "node scripts/check-docs.mjs --release",
     "check": "npm run check:version && npm run check:docs && node --check cli/index.mjs && npm test",
+    "check:release": "node scripts/release-check.mjs",
     "coverage:security": "node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-include=lib/authorizationHmac.mjs --test-coverage-include=lib/credential.mjs --test-coverage-include=lib/proofComment.mjs --test tests/**/*.test.mjs",
     "prepublishOnly": "npm run check && npm run check:docs:release && npm run coverage:security",
     "version": "node scripts/sync-version.mjs"
