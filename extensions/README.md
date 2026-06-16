@@ -16,12 +16,15 @@ validation rules.
    `creamlon.yaml` `extensions`. Tasks may include matching `extensions`
    fields. Core validates only that task `extensions` is a mapping.
 
+Extension authors must follow the namespace, scheme, lifecycle, and secret
+handling rules in [Extension governance](./governance.md).
+
 ## Registered extensions
 
-| Extension | Document | Purpose |
-| --- | --- | --- |
-| `delivery-hpke-v2` | [delivery-hpke-v2.md](./delivery-hpke-v2.md) | RFC 9180 encrypted bidirectional artifact transport |
-| `payment-bridge-v1` | [payment-bridge-v1.md](./payment-bridge-v1.md) | External payment to credential issuance pattern |
+| Namespace | Scheme or pattern | Status | Owner | Document | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| `delivery` | `hpke-x25519-hkdf-sha256-aes256gcm-v2` | stable | core | [delivery-hpke-v2.md](./delivery-hpke-v2.md) | RFC 9180 encrypted bidirectional artifact transport |
+| `payment` | `payment-bridge-v1` pattern | experimental | core | [payment-bridge-v1.md](./payment-bridge-v1.md) | External payment to credential issuance pattern |
 
 ## Interoperability
 
@@ -32,6 +35,10 @@ Each extension defines:
 - Task fields the caller includes in the Issue
 - Local-only secrets (never in Issues, logs, or commits)
 - Verification steps that run after core `fetch-proof --verify`
+
+Published scheme names are immutable. Breaking changes require a new scheme,
+and callers must negotiate support from the node manifest before submitting an
+extension task.
 
 Reference implementations ship in `lib/extensions/` and thin CLI helpers under
 `creamlon extension ...`.

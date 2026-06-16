@@ -1,0 +1,2 @@
+# Creamlon redemption log fixture
+{"version":"1","request_id":"req-fixture-1","credential_id":"CRED1234","credential_digest":"sha256:3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7","task_intent_digest":"sha256:a3f566585c659d8ec92d82785e8f7502d98670b3ea3f53d5c4a84a64df9d9a21","capability_id":"echo","redeemed_at":"2026-06-13T00:00:00.000Z"}

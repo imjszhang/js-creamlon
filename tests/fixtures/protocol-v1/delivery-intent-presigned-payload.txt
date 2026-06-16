@@ -1,0 +1,1 @@
+{"scheme":"hpke-x25519-hkdf-sha256-aes256gcm-v2","transport":"presigned-object-storage","ephemeral_public_key":"MCowBQYDK2VuAyEA2222222222222222222222222222222222222222222","artifacts":{"input":{"upload_url":"https://storage.example.com/input-put"},"output":{"upload_url":"https://storage.example.com/output-put"}}}

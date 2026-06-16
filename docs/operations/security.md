@@ -43,6 +43,11 @@ Callers should use `fetch-proof --verify` and reject signature, author,
 identity, task-binding, or digest mismatches. A valid proof is not a quality or
 confidentiality guarantee.
 
+Creamlon treats proof comments from repository owners, members,
+collaborators, and GitHub Apps as trusted proof carriers. Only grant Issue
+comment permissions to Apps that are allowed to publish delivery proofs for the
+node, and review installed Apps before relying on automated delivery.
+
 Node operators should validate tasks with `watch` before execution and use
 `audit` after proof, redemption, or key-rotation log changes.
 

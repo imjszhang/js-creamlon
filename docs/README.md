@@ -36,6 +36,10 @@ GitHub. Start with the path that matches what you need to do.
 
 - [Security](./operations/security.md): secrets, public metadata, and incident
   response.
+- [GitHub workflow](./operations/github-workflow.md): branch, pull request,
+  CI, merge, and release checks.
+- [Protocol compatibility](./operations/protocol-compatibility.md): stable
+  version 1 wire boundaries, scheme immutability, and release checks.
 - [Troubleshooting](./troubleshooting.md): common installation, discovery,
   submission, and verification failures.
 - [CLI reference](./reference/cli.md): command groups and where to get

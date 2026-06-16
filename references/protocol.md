@@ -39,6 +39,10 @@ extensions: {}
 Core and profile fields are strict. `extensions` is the only open namespace.
 Unknown protocol versions are rejected.
 
+Version 1 core fields are a stable wire boundary. New behavior is added through
+extensions, new schemes, or a new protocol version rather than by adding fields
+to core objects.
+
 `access` is optional. Its absence is equivalent to free access. Version 1
 supports:
 
@@ -95,6 +99,10 @@ The input digest is the supplied digest or SHA-256 of the UTF-8 `value`/`url`.
 Tasks may include an open `extensions` mapping. Core validation requires it to
 be a mapping when present and does not interpret extension semantics. Registered
 extensions live outside this specification.
+
+Callers must not submit extension task fields unless the target node manifest
+advertises support for the required extension namespace, scheme, transport, and
+feature set.
 
 ## Task Credentials
 
@@ -198,7 +206,13 @@ tasks. Their absence preserves the original free-task canonical payload.
 The proof adds a base64url `signature` field. A proof fetched from GitHub is
 accepted only when its signature is valid, its task binding matches, its
 credential intent matches when present, and its comment author is trusted for
-the repository.
+the repository. Trusted comment authors are repository owners, members,
+collaborators, and GitHub Apps with permission to comment on the node
+repository.
+
+Version 1 proof fields are not an extension surface. Extensions must not require
+additional top-level proof fields. Semantic changes to proof binding require a
+new scheme or protocol version.
 
 ## Delivery
 
@@ -215,3 +229,6 @@ continues interrupted delivery without redeeming the credential twice.
 
 YAML inputs use the core schema. Duplicate keys, aliases, unknown core fields,
 and documents larger than 64 KiB are rejected.
+
+Published schemes and canonical JSON payloads are immutable compatibility
+boundaries. Change scheme names instead of changing existing scheme semantics.
