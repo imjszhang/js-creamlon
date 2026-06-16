@@ -206,7 +206,9 @@ tasks. Their absence preserves the original free-task canonical payload.
 The proof adds a base64url `signature` field. A proof fetched from GitHub is
 accepted only when its signature is valid, its task binding matches, its
 credential intent matches when present, and its comment author is trusted for
-the repository.
+the repository. Trusted comment authors are repository owners, members,
+collaborators, and GitHub Apps with permission to comment on the node
+repository.
 
 Version 1 proof fields are not an extension surface. Extensions must not require
 additional top-level proof fields. Semantic changes to proof binding require a

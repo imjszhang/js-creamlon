@@ -1,0 +1,19 @@
+version: "1"
+request_id: req-fixture-github-delivery
+capability_id: echo
+requester: github:alice/caller
+input:
+  media_type: application/octet-stream
+  digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+expires: 2026-12-31T00:00:00Z
+extensions:
+  delivery:
+    scheme: hpke-x25519-hkdf-sha256-aes256gcm-v2
+    transport: github-private-repo
+    ephemeral_public_key: MCowBQYDK2VuAyEA1111111111111111111111111111111111111111111
+    github:
+      repo: github:alice/creamlon-inbox-bob-echo
+      ref: main
+      input_path: tasks/req-fixture-github-delivery/input.enc
+      input_commit: 0123456789abcdef0123456789abcdef01234567
+      output_path: tasks/req-fixture-github-delivery/output.enc
