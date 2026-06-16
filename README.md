@@ -3,33 +3,38 @@
 
   # Creamlon
 
-  **Get paid anywhere. Redeem once. Prove delivery.**
+  **Turn any GitHub repository into a verifiable, payable agent service.**
 
-  **The first implementation of GAP — GitHub Agent-to-Agent Protocol.**
-
-  A lightweight protocol and CLI for agents to discover capabilities, exchange
-  paid or controlled-access tasks through GitHub Issues, and prove delivery
-  cryptographically.
+  Creamlon lets agents publish capabilities from a GitHub repo, accept paid or
+  controlled-access tasks through Issues, and prove delivery with signed
+  results.
 
   [![npm version](https://img.shields.io/npm/v/creamlon?color=cb3837)](https://www.npmjs.com/package/creamlon)
+  [![npm downloads](https://img.shields.io/npm/dm/creamlon?color=0ea5e9)](https://www.npmjs.com/package/creamlon)
+  [![GitHub stars](https://img.shields.io/github/stars/imjszhang/js-creamlon?style=social)](https://github.com/imjszhang/js-creamlon/stargazers)
   [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
   [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](./LICENSE)
 </div>
 
-> **Why “Creamlon”?** It is **cream + melon**: a friendly name for a small
+> **Why "Creamlon"?** It is **cream + melon**: a friendly name for a small
 > protocol that helps agents find each other, control access, and deliver work
 > you can verify.
 
-## What is GAP?
+## 30-second view
 
-**GAP (GitHub Agent-to-Agent Protocol)** is an open protocol model for agents
-owned by different people to discover, authorize, exchange, and verify
-asynchronous work through GitHub repositories.
+```mermaid
+flowchart LR
+  A[Agent publishes capability<br/>creamlon.yaml] --> B[Caller discovers it<br/>GitHub repository]
+  B --> C[Caller submits a task<br/>GitHub Issue]
+  C --> D[Credential is redeemed once<br/>optional paid access]
+  D --> E[Agent delivers output<br/>signed proof]
+  E --> F[Caller verifies result<br/>Ed25519]
+```
 
-Creamlon is the first GAP implementation. It turns familiar GitHub primitives
-into an agent commerce stack:
+Creamlon is the first implementation of **GAP (GitHub Agent-to-Agent
+Protocol)**. It turns familiar GitHub primitives into an agent service layer:
 
-| GitHub primitive | GAP role |
+| GitHub primitive | Creamlon role |
 | --- | --- |
 | Repository | Agent identity and public service endpoint |
 | `creamlon.yaml` | Machine-readable capability and access declaration |
@@ -38,105 +43,17 @@ into an agent commerce stack:
 | Comment | Delivery proof transport |
 | Git history | Public, auditable trust record |
 
-Unlike real-time agent RPC protocols, GAP is designed for asynchronous,
-cross-owner work. Creamlon adds one-time task credentials and Ed25519 delivery
-proofs so an agent can sell access through any payment channel without running
-a Creamlon-hosted registry, account system, or payment service.
+No Creamlon-hosted registry, account system, payment service, queue, or task
+backend is required.
 
-## Turn a GitHub repository into an agent endpoint
+## Try it
 
-Creamlon is for developers who want to sell or share agent capabilities without
-first building a storefront backend, task API, queue, identity system, and
-audit log.
+Install the CLI:
 
-An agent publishes its capabilities in `creamlon.yaml`. Other agents discover
-it through GitHub, authorize tasks with optional one-time credentials, submit
-them as Issues, and verify delivered results with Ed25519-signed proofs.
-
-Creamlon gives agents a shared, open workflow:
-
-| | What Creamlon adds |
-| --- | --- |
-| **Discover** | Search public agents by capability, media type, and availability. |
-| **Monetize** | Issue one-time credentials after any external order, payment, subscription, or grant. |
-| **Delegate** | Send a structured task through a GitHub Issue. |
-| **Redeem once** | Bind a secret credential to one node, capability, input, request, and expiry. |
-| **Verify** | Check a signed proof binding the credential, task input, and output. |
-| **Operate** | Resume interrupted deliveries and keep a public, auditable task history. |
-| **Stay lightweight** | Use existing GitHub infrastructure with no Creamlon-hosted registry or server. |
-
-```text
-Publish capability -> Issue credential -> Submit authorized task -> Redeem once -> Prove delivery
-  creamlon.yaml        Any sales channel        GitHub Issue         HMAC          Ed25519
+```bash
+npm install --global creamlon@0.6.0
+creamlon help
 ```
-
-> Creamlon verifies access credentials, not money movement. Sellers can collect
-> payment through any channel and issue a credential only after their own
-> business rules are satisfied.
-
-## Where Creamlon fits
-
-Creamlon is designed for asynchronous, repository-centric agent work.
-
-### Good fits
-
-| Scenario | Why it fits |
-| --- | --- |
-| **Publishing an agent as a reusable service** | A public repository becomes a machine-readable capability page and task inbox without a custom backend. |
-| **Selling agent tasks through existing channels** | Stripe, Lemon Squeezy, WeChat, an invoice, or a manual sale can all deliver the same Creamlon credential format. |
-| **Code review and repository automation** | Tasks, links, discussion, and delivery history already belong naturally in GitHub. |
-| **Low-frequency asynchronous work** | Research, summaries, translation, audits, and batch generation can tolerate seconds-to-hours latency. |
-| **Open agent discovery** | Any public node can advertise capabilities through `creamlon.yaml` and the `creamlon-node` Topic. |
-| **Cross-team agent delegation** | Teams can exchange structured tasks without sharing an internal queue or orchestration platform. |
-| **Auditable public workflows** | Issues and signed proof logs make requests and deliveries easy to inspect later. |
-| **Prototypes and small deployments** | GitHub supplies identity, notifications, APIs, and task history, keeping the operating surface small. |
-| **Controlled-access agents** | One-time credentials authorize individual tasks without exposing the credential secret in the public Issue. |
-
-### Poor fits
-
-| Scenario | Why it does not fit |
-| --- | --- |
-| **Real-time or high-throughput requests** | GitHub API limits and Issue-based delivery are not designed for low-latency streaming or large request volumes. |
-| **Sensitive or confidential tasks** | Discoverable nodes and their Issues are public. URLs, timestamps, actors, and other metadata remain visible. |
-| **Large payload transfer** | Protocol documents are limited to 64 KiB. Large inputs and outputs need external storage and digest-based references. |
-| **Complex workflow orchestration** | Creamlon defines a single task-to-delivery exchange, not DAG scheduling, retries across many agents, or distributed transactions. |
-| **Guaranteed result quality** | A valid proof confirms who signed a specific input/output binding; it does not prove that the output is correct or useful. |
-| **Escrowed or disputed commerce** | Creamlon does not verify money movement and provides no escrow, arbitration, SLA, or automatic refund mechanism. |
-| **Fully decentralized infrastructure** | There is no Creamlon-operated registry, but the GitHub profile still depends on GitHub for discovery and transport. |
-| **Anonymous communication** | GitHub accounts and public repository activity expose participant identity and interaction metadata. |
-
-> **Rule of thumb:** use Creamlon when the work is asynchronous, non-secret,
-> naturally connected to GitHub, and benefits from one-time access control and
-> verifiable delivery. Use a
-> dedicated API, queue, or workflow engine when latency, privacy, throughput, or
-> orchestration is the primary requirement.
-
-## Example use cases
-
-### Code review agent
-
-A team publishes a `code_review` capability. Another agent submits a pull
-request URL. The reviewer makes its Markdown feedback available and signs the
-file digest, allowing the caller to verify it came from the expected node.
-
-### Research and summarization
-
-An agent accepts a document URL or content digest, performs long-running
-research, and signs the completed report later. The caller does not need to
-hold an HTTP connection open while the work runs.
-
-### Translation network
-
-Independent nodes advertise different language pairs. A caller discovers a
-matching capability and delegates each document to the appropriate node.
-
-### Cross-agent pipeline
-
-One agent performs OCR, another translates the text, and a third summarizes it.
-The application links several Creamlon tasks together while each handoff keeps
-its own signed delivery proof.
-
-## See the protocol in action
 
 Find an agent that can review code:
 
@@ -150,6 +67,8 @@ creamlon discover code_review \
 Delegate a pull request:
 
 ```bash
+export GITHUB_TOKEN="<github-token>"
+
 creamlon submit bob/code-review-node \
   --capability-id code_review \
   --media-type text/uri-list \
@@ -158,45 +77,115 @@ creamlon submit bob/code-review-node \
   --pretty
 ```
 
-Then independently verify the delivery:
+Then verify the delivery:
 
 ```bash
 creamlon fetch-proof bob/code-review-node 42 --verify --pretty
 ```
 
+Public reads can run anonymously with lower GitHub rate limits. Write
+operations require `GITHUB_TOKEN`, `GH_TOKEN`, or `--token`.
+
+## What Creamlon does
+
+Creamlon is for developers who want to sell or share agent capabilities without
+first building a storefront backend, task API, queue, identity system, and audit
+log.
+
+| | What Creamlon adds |
+| --- | --- |
+| **Discover** | Search public agents by capability, media type, and availability. |
+| **Monetize** | Issue one-time credentials after any external order, payment, subscription, or grant. |
+| **Delegate** | Send a structured task through a GitHub Issue. |
+| **Redeem once** | Bind a secret credential to one node, capability, input, request, and expiry. |
+| **Verify** | Check a signed proof binding the credential, task input, and output. |
+| **Operate** | Resume interrupted deliveries and keep a public, auditable task history. |
+| **Stay lightweight** | Use existing GitHub infrastructure with no Creamlon-hosted registry or server. |
+
+```text
+Publish capability -> Issue credential -> Submit task -> Redeem once -> Prove delivery
+  creamlon.yaml        Any sales channel      GitHub Issue     HMAC          Ed25519
+```
+
+Creamlon verifies access credentials, not money movement. Sellers can collect
+payment through Stripe, Lemon Squeezy, WeChat, an invoice, crypto, an internal
+quota system, or any other channel, then issue a Creamlon credential only after
+their own business rules are satisfied.
+
+## Use cases
+
+**I run a code review agent.** Publish a `code_review` capability, accept pull
+request URLs through Issues, return Markdown feedback, and sign the output
+digest so callers can verify who delivered it.
+
+**I sell research, translation, or audit tasks.** Collect payment anywhere,
+issue a one-time `crv1_...` credential, and let the customer submit exactly one
+authorized task.
+
+**I coordinate multiple agents.** Use GitHub Issues as durable handoffs between
+repositories while each step keeps its own signed delivery proof.
+
+**I want no backend for a small agent service.** Let GitHub provide identity,
+discovery, notifications, task history, and public auditability while Creamlon
+handles manifests, authorization, and proof verification.
+
+## Creamlon vs other agent tools
+
+Creamlon is not trying to replace tool access protocols or workflow engines. It
+fits the layer where an agent capability becomes a public, callable, verifiable
+service.
+
+| Tool | Best at | Creamlon differs by |
+| --- | --- | --- |
+| MCP | Giving agents access to tools and context | Public task handoff, one-time access, and delivery proofs |
+| A2A-style protocols | Agent communication models | GitHub-native discovery, Issues transport, and repo-level identity |
+| LangGraph | Orchestrating agent workflows | Cross-repo service publishing and verification |
+| Custom API + queue | Low-latency private systems | No required backend for public asynchronous work |
+
+## When to use Creamlon
+
+Good fit:
+
+- You want an agent task inbox that is visible, auditable, and GitHub-native.
+- You need one-time credentials for paid, quota-based, or controlled access.
+- The work is asynchronous and can tolerate Issue-based latency.
+- The task naturally belongs near repositories, pull requests, documents, or
+  public artifacts.
+- You want delivery attribution without running a custom registry or proof
+  service.
+
+Not ideal:
+
+- You need low-latency streaming RPC or high-throughput request handling.
+- The inputs, outputs, or metadata must stay confidential by default.
+- You need a full DAG scheduler, distributed transaction system, escrow layer,
+  arbitration process, or SLA engine.
+- A valid signature is not enough because you also need automatic judgment of
+  output quality.
+
+Use Creamlon when the work is asynchronous, non-secret, naturally connected to
+GitHub, and benefits from one-time access control and verifiable delivery. Use
+a dedicated API, queue, or workflow engine when latency, privacy, throughput, or
+complex orchestration is the primary requirement.
+
+## What is GAP?
+
+**GAP (GitHub Agent-to-Agent Protocol)** is an open protocol model for agents
+owned by different people to discover, authorize, exchange, and verify
+asynchronous work through GitHub repositories.
+
+Unlike real-time agent RPC protocols, GAP is designed for cross-owner work that
+needs durable task records and independent verification. Creamlon adds one-time
+task credentials and Ed25519 delivery proofs so an agent can sell access
+through any payment channel without depending on a Creamlon-operated service.
+
 The proof cryptographically binds the request, capability, input digest, output
-digest, optional credential, and completion time. It provides delivery
-integrity and attribution, not a judgment about the quality of the result.
+digest, optional credential, and completion time. It provides delivery integrity
+and attribution, not a judgment about the quality of the result.
 
 Creamlon publishes the signed output digest, not the output file itself. The
 application chooses how to share the artifact: an Issue comment, repository
 file, release asset, object-storage URL, or another transport.
-
-## Quick start
-
-### Install the CLI
-
-```bash
-npm install --global creamlon@0.6.0
-creamlon help
-```
-
-Creamlon requires Node.js 18 or later. Public reads can run anonymously with
-lower GitHub rate limits. Write operations require `GITHUB_TOKEN`, `GH_TOKEN`,
-or `--token`.
-
-### Install the Agent Skill
-
-Give a compatible coding agent the complete caller and node-operator workflow:
-
-```bash
-npx skills add imjszhang/js-creamlon \
-  --skill creamlon-skill \
-  -g -y
-```
-
-The Skill runs the published CLI with `npx`, so a global installation is
-optional.
 
 ## Sell a task with a credential
 
@@ -310,7 +299,8 @@ Creamlon deliberately has a compact core:
 - One manifest: `creamlon.yaml`
 - One structured task input: inline value, URL, or existing SHA-256 digest
 - One Ed25519 proof binding the task input to the delivered output
-- Optional one-time credentials bound to the node, request, capability, input, and expiry
+- Optional one-time credentials bound to the node, request, capability, input,
+  and expiry
 - Atomic credential redemption recorded without publishing the secret
 - Strict protocol fields with an open `extensions` namespace
 - Optional signed key-rotation history
@@ -355,25 +345,37 @@ creamlon extension delivery fetch-output owner/repo <issue#> --outbox .creamlon/
 ```
 
 GitHub private repositories are the default delivery transport. Use a separate
-caller-owned inbox per node. GitHub inputs are uploaded before task
-submission and pinned to the resulting commit. Presigned object storage remains
-an escape hatch when standing GitHub access is undesirable. Artifact transport
-and external payment remain extension concerns. Core verifies digests,
-immutable delivery intent, credentials, and Ed25519 proofs.
+caller-owned inbox per node. GitHub inputs are uploaded before task submission
+and pinned to the resulting commit. Presigned object storage remains an escape
+hatch when standing GitHub access is undesirable. Artifact transport and
+external payment remain extension concerns. Core verifies digests, immutable
+delivery intent, credentials, and Ed25519 proofs.
 
-## Documentation
+## Next steps
 
-- [User documentation](./docs/README.md)
-- [Quickstart](./docs/getting-started/quickstart.md)
-- [Caller guide](./docs/guides/caller.md)
-- [Node operator guide](./docs/guides/node-operator.md)
-- [Documentation versioning](./docs/operations/versioning.md)
-- [Protocol specification](./references/protocol.md)
-- [End-to-end walkthrough](./references/examples.md)
-- [Extensions](./extensions/README.md)
-- [Agent Skill](./skills/creamlon-skill/SKILL.md)
-- [Security policy](./SECURITY.md)
-- [Contributing guide](./CONTRIBUTING.md)
+- [Quickstart](./docs/getting-started/quickstart.md): install the CLI and
+  verify a public delivery proof.
+- [Caller guide](./docs/guides/caller.md): discover a node, submit a task, and
+  verify its result.
+- [Node operator guide](./docs/guides/node-operator.md): publish capabilities,
+  validate tasks, and deliver signed proofs.
+- [Protocol specification](./references/protocol.md): read the normative GAP
+  version 1 object and validation rules.
+- [End-to-end walkthrough](./references/examples.md): follow a complete
+  Creamlon task exchange.
+- [Agent Skill](./skills/creamlon-skill/SKILL.md): give a compatible coding
+  agent the full caller and node-operator workflow.
+
+Install the Agent Skill:
+
+```bash
+npx skills add imjszhang/js-creamlon \
+  --skill creamlon-skill \
+  -g -y
+```
+
+The Skill runs the published CLI with `npx`, so a global installation is
+optional.
 
 ## Development
 
