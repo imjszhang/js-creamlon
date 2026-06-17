@@ -10,7 +10,7 @@ import {
   searchRepositories,
   setGithubFetch,
 } from '../lib/github.mjs';
-import { setManifestFetch } from '../lib/manifest.mjs';
+import { parseManifest, setManifestFetch } from '../lib/manifest.mjs';
 import { hashText } from '../lib/hash.mjs';
 import { buildProofFields, signProof, generateKeyPair } from '../lib/proof.mjs';
 import { signHmacAuthorization } from '../lib/authorizationHmac.mjs';
@@ -547,6 +547,99 @@ test('watch lists pending tasks with validation', async () => {
   } finally {
     resetFetch();
   }
+});
+
+test('watch accepts only the earliest pending task for a one-time credential', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-watch-credential-claim-'));
+  const logs = [];
+  const origLog = console.log;
+  try {
+    const keygen = await generateKeyPair(null);
+    const manifestText = CREDENTIAL_MANIFEST_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url);
+    const manifest = parseManifest(manifestText);
+    const generated = generateCredential();
+    await writeCredentialStore(join(dir, '.creamlon', 'credentials.json'), {
+      version: '1',
+      credentials: [{
+        credential_id: generated.credential_id,
+        secret: generated.secret,
+        capability_id: 'echo',
+        status: 'available',
+        created_at: '2026-06-17T00:00:00Z',
+        expires: null,
+      }],
+    });
+
+    const first = {
+      version: '1',
+      request_id: 'req-paid-first',
+      capability_id: 'echo',
+      requester: 'github:alice/caller',
+      input: { media_type: 'text/plain', value: 'first paid input' },
+      expires: '2099-01-01T00:00:00Z',
+    };
+    first.credential = authorizeCredential(first, manifest, generated.value);
+    const second = {
+      version: '1',
+      request_id: 'req-paid-second',
+      capability_id: 'echo',
+      requester: 'github:alice/caller',
+      input: { media_type: 'text/plain', value: 'second paid input' },
+      expires: '2099-01-01T00:00:00Z',
+    };
+    second.credential = authorizeCredential(second, manifest, generated.value);
+
+    installMockFetch((url) => {
+      if (url.includes('raw.githubusercontent.com')) {
+        return { status: 200, body: manifestText };
+      }
+      if (url.includes('/issues?')) {
+        return {
+          status: 200,
+          body: [
+            {
+              number: 4,
+              title: '[task] echo',
+              state: 'open',
+              created_at: '2026-06-17T00:02:00Z',
+              body: serializeTask(second),
+              html_url: 'https://github.com/o/r/issues/4',
+            },
+            {
+              number: 3,
+              title: '[task] echo',
+              state: 'open',
+              created_at: '2026-06-17T00:01:00Z',
+              body: serializeTask(first),
+              html_url: 'https://github.com/o/r/issues/3',
+            },
+          ],
+        };
+      }
+      return { status: 404, body: { message: 'not found' } };
+    });
+
+    console.log = (message) => logs.push(message);
+    await runCli([
+      'watch', 'owner/repo',
+      '--repo-path', dir,
+      '--token', 'test-token',
+      '--pretty',
+    ]);
+  } finally {
+    console.log = origLog;
+    resetFetch();
+    await rm(dir, { recursive: true, force: true });
+  }
+
+  const out = JSON.parse(logs.join('\n'));
+  assert.equal(out.pending_count, 2);
+  assert.equal(out.valid_count, 1);
+  assert.equal(out.invalid_count, 1);
+  assert.deepEqual(out.tasks.map((task) => task.issue_number), [3, 4]);
+  assert.equal(out.tasks[0].valid, true);
+  assert.equal(out.tasks[1].valid, false);
+  assert.ok(out.tasks[1].errors.includes('credential already claimed by pending task req-paid-first'));
 });
 
 test('deliver dry-run output contains proof hashes', async () => {

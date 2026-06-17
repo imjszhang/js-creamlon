@@ -386,6 +386,15 @@ function printJson(obj, pretty) {
   console.log(JSON.stringify(obj, null, pretty ? 2 : 0));
 }
 
+function compareIssueCreationOrder(left, right) {
+  const leftTime = Date.parse(left.created_at || '');
+  const rightTime = Date.parse(right.created_at || '');
+  if (!Number.isNaN(leftTime) && !Number.isNaN(rightTime) && leftTime !== rightTime) {
+    return leftTime - rightTime;
+  }
+  return Number(left.number || 0) - Number(right.number || 0);
+}
+
 function resolveToken(opts) {
   return getGithubToken(opts.token);
 }
@@ -726,9 +735,12 @@ async function cmdWatch(positional, opts) {
   }
 
   const issues = await listIssues(owner, repo, { state: 'open', token });
-  const taskIssues = issues.filter((i) => isTaskIssue(i.title) && !i.pull_request);
+  const taskIssues = issues
+    .filter((i) => isTaskIssue(i.title) && !i.pull_request)
+    .sort(compareIssueCreationOrder);
 
   const results = [];
+  const credentialClaims = new Map();
   for (const issue of taskIssues) {
     try {
       const task = parseTask(issue.body || '');
@@ -738,8 +750,16 @@ async function cmdWatch(positional, opts) {
         authorizationSecrets,
         credentialStore,
         redemptions,
+        credentialClaims,
         checkIssueMeta: true,
       });
+      const valid = acceptance.errors.length === 0;
+      if (valid && task.credential?.credential_id) {
+        credentialClaims.set(task.credential.credential_id, {
+          issue_number: issue.number,
+          request_id: task.request_id,
+        });
+      }
 
       results.push({
         issue_number: issue.number,
@@ -748,7 +768,7 @@ async function cmdWatch(positional, opts) {
         request_id: task.request_id,
         capability_id: task.capability_id,
         requester: task.requester,
-        valid: acceptance.errors.length === 0,
+        valid,
         errors: acceptance.errors,
         authorization_ok: acceptance.authorization_ok,
         authorization_error: acceptance.authorization_error,
