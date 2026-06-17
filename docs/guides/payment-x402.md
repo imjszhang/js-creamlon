@@ -109,6 +109,57 @@ creamlon submit owner/code-review-node \
 The node processes the task normally. Delivery proofs and optional private
 delivery extensions do not change.
 
+## Private delivery composition
+
+x402 payment and private delivery are independent layers. x402 decides when the
+vendor may issue a one-time credential; `delivery-hpke-v2` moves private input
+and output artifacts. A paid private task uses both:
+
+1. Caller pays the x402 `resource_url` and receives a private `crv1_...`
+   credential.
+2. Caller prepares private delivery, uploads encrypted input, and submits the
+   resulting task file with that credential.
+3. Node verifies the credential during `watch`, decrypts input with
+   `fetch-input`, uploads encrypted output with `send-output`, and then runs
+   `deliver`.
+4. Caller runs `fetch-output` and `fetch-proof --verify`.
+
+```bash
+creamlon caller inbox init --node owner/private-node
+creamlon caller inbox grant --node owner/private-node
+creamlon caller inbox check --node owner/private-node
+
+creamlon extension delivery prepare owner/private-node \
+  --outbox-dir ./.creamlon/outbox \
+  --pretty
+
+creamlon extension delivery draft \
+  --task-file ./task.yaml \
+  --extensions-file ./.creamlon/outbox/<request-id>.extensions.json \
+  --request-id <request-id> \
+  --capability-id code_review \
+  --requester github:alice/private-inbox \
+  --media-type text/plain \
+  --input-digest <sha256-digest>
+
+creamlon extension delivery send-input \
+  --task-file ./task.yaml \
+  --input-file ./input.txt \
+  --extensions-file ./.creamlon/outbox/<request-id>.extensions.json \
+  --outbox ./.creamlon/outbox/<request-id>.json \
+  --receive-public-key <node-delivery-public-key>
+
+creamlon submit owner/private-node \
+  --task-file ./task.yaml \
+  --credential "crv1_..." \
+  --pretty
+```
+
+The public Issue still exposes delivery metadata such as the inbox repository,
+artifact paths, immutable input commit, request ID, ephemeral public key, and
+input digest. It must not contain the complete credential, payment signature,
+plaintext input, or plaintext output.
+
 ## Secret boundaries
 
 These values must stay out of public Issues, comments, commits, and logs:
@@ -126,6 +177,7 @@ private business terms: `resource_url`, `network`, `asset`, display `price`,
 
 - Bind the sold resource path to the same `capability_id` passed to
   `creamlon credential create`.
+- Do not issue a credential when facilitator verification or settlement fails.
 - Set a credential expiry that matches the paid offer.
 - Make retries idempotent so one settled x402 payment cannot mint multiple
   credentials by accident.

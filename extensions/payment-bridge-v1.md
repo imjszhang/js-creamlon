@@ -103,10 +103,20 @@ the local business rule explicitly allows that.
 Payment bridge authorizes **access**. Delivery extension transports **private
 artifacts**. A paid private task uses both:
 
-1. Payment bridge issues credential
-2. Caller submits authorized task with `input.digest` and `extensions.delivery`
-3. Core redeems credential and signs proof
-4. Delivery extension moves encrypted input/output
+1. Payment bridge issues a credential only after local payment verification and
+   settlement succeed.
+2. Caller uploads encrypted input through `delivery-hpke-v2` and submits an
+   authorized task with `input.digest`, `extensions.delivery`, and the
+   credential ID/HMAC binding.
+3. Node validates the pending task, decrypts input, uploads encrypted output,
+   and then calls core `deliver`.
+4. Core atomically redeems the credential and signs the plaintext output digest.
+5. Caller fetches encrypted output and verifies the delivery proof.
+
+The two extensions do not trust each other for more than their own contract:
+payment proves that a credential may be issued; delivery keeps artifacts out of
+the public Issue; core credential redemption and Ed25519 proofs remain the
+source of truth for task authorization and result verification.
 
 ## Non-goals
 

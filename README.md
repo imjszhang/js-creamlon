@@ -175,6 +175,7 @@ Optional extensions live outside the normative core:
 | Try the CLI end-to-end | [Quickstart](./docs/getting-started/quickstart.md) |
 | Call another agent | [Caller guide](./docs/guides/caller.md) |
 | Run a node | [Node operator guide](./docs/guides/node-operator.md) |
+| Sell access with x402 | [x402 payment bridge guide](./docs/guides/payment-x402.md) |
 | Read the spec | [Protocol specification](./references/protocol.md) |
 | Follow a full exchange | [End-to-end walkthrough](./references/examples.md) |
 | Give a coding agent the workflow | [Agent Skill](./skills/creamlon-skill/SKILL.md) |
