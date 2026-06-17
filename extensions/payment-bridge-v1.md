@@ -34,6 +34,7 @@ extensions:
       - id: stripe
         checkout_url: https://shop.example/checkout
       - id: x402
+        capability_id: code_review
         resource_url: https://pay.example/buy/code_review
         network: base
         asset: USDC
@@ -44,6 +45,42 @@ extensions:
 
 Core ignores `extensions.payment`. It exists for human and agent discovery
 only, and does not define machine-interpreted task fields.
+
+## Per-capability provider binding
+
+Provider entries may include an optional `capability_id` field. When present,
+the provider advertises how to buy credentials for only that capability. When
+absent, the provider is node-level and may apply to any credential-protected
+capability according to the provider's own checkout or resource flow.
+
+```yaml
+capabilities:
+  - id: code_review
+    access: { mode: credential, units: 1 }
+  - id: echo
+    access: { mode: credential, units: 1 }
+
+extensions:
+  payment:
+    pattern: payment-bridge-v1
+    providers:
+      - id: x402
+        capability_id: code_review
+        resource_url: https://pay.example/buy/code_review
+        price: "2.00"
+      - id: x402
+        capability_id: echo
+        resource_url: https://pay.example/buy/echo
+        price: "0.50"
+      - id: stripe
+        checkout_url: https://shop.example/checkout
+```
+
+Callers resolving payment hints for a capability should prefer provider entries
+whose `capability_id` exactly matches the requested capability. If no exact
+entry exists, callers may fall back to node-level entries without
+`capability_id`. Existing manifests without `capability_id` therefore retain
+their previous node-level meaning.
 
 ## x402 provider
 
@@ -69,6 +106,8 @@ Resource server returns complete crv1_... through the HTTP response body
 Recommended manifest provider fields:
 
 - `id`: always `x402`
+- `capability_id`: optional capability this provider sells credentials for; omit
+  for a node-level x402 entry
 - `resource_url`: HTTPS endpoint that sells one credential for the advertised
   capability
 - `network`: x402 network identifier, for example `base`
@@ -78,10 +117,11 @@ Recommended manifest provider fields:
 - `pay_to`: recipient address or account identifier used by the resource server
 - `facilitator`: facilitator base URL used for x402 verification and settlement
 
-The resource URL should encode or otherwise bind the purchased capability, and
-the credential creation step must bind the same `capability_id` and expiry that
-the payment was sold for. If the payment is for `code_review`, the issued
-credential must not authorize a different capability.
+The `capability_id`, resource URL, and credential creation step must all bind
+the same capability and expiry that the payment was sold for. If the payment is
+for `code_review`, the issued credential must not authorize a different
+capability. When `capability_id` is omitted for backward compatibility, the
+resource URL should encode or otherwise bind the purchased capability.
 
 x402 provider integrations must also be idempotent. A retry with the same
 settled payment should return the same already-issued credential or a safe

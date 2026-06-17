@@ -52,6 +52,28 @@ Optional variables:
 - `IDEMPOTENCY_LOCK_TIMEOUT_MS`: local receipt store lock timeout, default
   `10000`
 
+Advertise the x402 resource in the node manifest with a capability-bound
+provider hint:
+
+```yaml
+extensions:
+  payment:
+    pattern: payment-bridge-v1
+    providers:
+      - id: x402
+        capability_id: code_review
+        resource_url: https://pay.example/buy/code_review
+        network: base
+        asset: USDC
+        price: "0.50"
+        pay_to: "0x1111111111111111111111111111111111111111"
+        facilitator: https://x402.facilitator.example
+```
+
+For a node with multiple paid capabilities, add one provider entry per
+capability and point each `resource_url` at the matching `/buy/<capability-id>`
+path.
+
 ## Run
 
 ```bash
