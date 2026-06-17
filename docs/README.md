@@ -2,7 +2,7 @@
 title: Creamlon documentation
 audience: all users
 status: current
-verified: 0.6.0
+verified: 0.7.0
 ---
 
 # Creamlon documentation
@@ -22,6 +22,8 @@ GitHub. Start with the path that matches what you need to do.
   verify its result.
 - [Run a node](./guides/node-operator.md): publish capabilities, validate tasks,
   and deliver signed proofs.
+- [Sell access with x402](./guides/payment-x402.md): run an experimental x402
+  payment bridge that issues one-time credentials.
 
 ## Understand Creamlon
 

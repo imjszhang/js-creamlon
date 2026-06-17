@@ -2,7 +2,7 @@
 title: Troubleshooting
 audience: all users
 status: current
-verified: 0.6.0
+verified: 0.7.0
 ---
 
 # Troubleshooting

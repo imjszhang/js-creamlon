@@ -19,6 +19,10 @@ import { parseManifest } from '../lib/manifest.mjs';
 import { parseTask, serializeTask } from '../lib/task.mjs';
 import { validateTaskAcceptance } from '../lib/acceptance.mjs';
 
+function assertPrivateMode(mode) {
+  if (process.platform !== 'win32') assert.equal(mode & 0o077, 0);
+}
+
 const MANIFEST = parseManifest(`version: "1"
 name: paid-node
 identity:
@@ -271,7 +275,7 @@ test('credential store persists privately and validates records', async () => {
     await writeCredentialStore(path, store);
     assert.deepEqual(await loadCredentialStore(path), store);
     const stat = await import('node:fs/promises').then((fs) => fs.stat(path));
-    assert.equal(stat.mode & 0o077, 0);
+    assertPrivateMode(stat.mode);
     assert.match(await readFile(path, 'utf8'), new RegExp(generated.secret));
   } finally {
     await rm(dir, { recursive: true, force: true });

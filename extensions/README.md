@@ -24,7 +24,7 @@ handling rules in [Extension governance](./governance.md).
 | Namespace | Scheme or pattern | Status | Owner | Document | Purpose |
 | --- | --- | --- | --- | --- | --- |
 | `delivery` | `hpke-x25519-hkdf-sha256-aes256gcm-v2` | stable | core | [delivery-hpke-v2.md](./delivery-hpke-v2.md) | RFC 9180 encrypted bidirectional artifact transport |
-| `payment` | `payment-bridge-v1` pattern | experimental | core | [payment-bridge-v1.md](./payment-bridge-v1.md) | External payment to credential issuance pattern |
+| `payment` | `payment-bridge-v1` pattern | experimental | core | [payment-bridge-v1.md](./payment-bridge-v1.md) | External payment, including x402 providers, to credential issuance pattern |
 
 ## Interoperability
 
