@@ -87,6 +87,10 @@ complete `crv1_...` credential after the facilitator accepts settlement.
 A caller agent reads the manifest, requests the advertised `resource_url`, and
 receives x402 payment requirements:
 
+When a node advertises multiple payment providers, prefer entries whose
+`capability_id` exactly matches the target capability. If no exact entry exists,
+fall back to node-level providers without `capability_id`.
+
 ```bash
 curl -i https://pay.example/buy/code_review
 ```
@@ -177,13 +181,13 @@ These values must stay out of public Issues, comments, commits, and logs:
 - private artifact URLs or plaintext private task data
 
 These values are safe as public discovery hints when they do not disclose
-private business terms: `resource_url`, `network`, `asset`, display `price`,
-`pay_to`, and `facilitator`.
+private business terms: `capability_id`, `resource_url`, `network`, `asset`,
+display `price`, `pay_to`, and `facilitator`.
 
 ## Operator checks
 
-- Bind the sold resource path to the same `capability_id` passed to
-  `creamlon credential create`.
+- Keep the manifest provider `capability_id`, sold resource path, and
+  `creamlon credential create --capability-id` value aligned.
 - Do not issue a credential when facilitator verification or settlement fails.
 - Set a credential expiry that matches the paid offer.
 - Make retries idempotent so one settled x402 payment cannot mint multiple
