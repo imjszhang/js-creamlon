@@ -37,6 +37,7 @@ extensions:
     instructions: "Pay with x402 to receive a one-time Creamlon credential."
     providers:
       - id: x402
+        capability_id: code_review
         resource_url: https://pay.example/buy/code_review
         network: base
         asset: USDC
@@ -45,9 +46,15 @@ extensions:
         facilitator: https://x402.facilitator.example
 ```
 
-The `resource_url` should sell exactly one credential for the named capability.
-The server remains authoritative for exact x402 payment requirements, amounts,
-timeouts, and facilitator behavior.
+The `capability_id` field lets caller agents bind this provider hint to the
+matching Creamlon capability without parsing the URL path. Nodes with multiple
+paid capabilities should publish one provider entry per priced capability. A
+provider without `capability_id` remains a node-level fallback for older or
+general checkout flows.
+
+The `resource_url` should still sell exactly one credential for the named
+capability. The server remains authoritative for exact x402 payment
+requirements, amounts, timeouts, and facilitator behavior.
 
 ## Run a credential vendor
 
