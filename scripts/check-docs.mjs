@@ -30,14 +30,14 @@ async function walk(dir) {
 }
 
 function parseFrontmatter(content, file) {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n/);
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
   if (!match) {
     failures.push(`${file}: missing YAML frontmatter`);
     return {};
   }
 
   const metadata = {};
-  for (const line of match[1].split('\n')) {
+  for (const line of match[1].split(/\r?\n/)) {
     const separator = line.indexOf(':');
     if (separator === -1) continue;
     const key = line.slice(0, separator).trim();

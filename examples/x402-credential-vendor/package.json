@@ -1,0 +1,14 @@
+{
+  "name": "creamlon-x402-credential-vendor-example",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Example x402 resource server that sells Creamlon credentials",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check server.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

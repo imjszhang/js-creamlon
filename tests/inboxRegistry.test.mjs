@@ -12,6 +12,10 @@ import {
   writeInboxRegistry,
 } from '../lib/inboxRegistry.mjs';
 
+function assertPrivateMode(mode) {
+  if (process.platform !== 'win32') assert.equal(mode & 0o077, 0);
+}
+
 test('caller inbox registry roundtrips per-node entries privately', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-inboxes-'));
   const path = join(dir, 'inboxes.yaml');
@@ -33,7 +37,7 @@ test('caller inbox registry roundtrips per-node entries privately', async () => 
     grant: null,
     granted_at: null,
   });
-  assert.equal((await stat(written)).mode & 0o077, 0);
+  assertPrivateMode((await stat(written)).mode);
   assert.match(await readFile(written, 'utf8'), /version: "1"/);
 });
 

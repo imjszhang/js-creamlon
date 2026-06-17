@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0 - 2026-06-17
+
+### Added
+
+- Added experimental x402 payment bridge documentation and an example
+  credential vendor service for issuing one-time credentials after x402
+  settlement.
+
 ## 0.6.0 - 2026-06-15
 
 ### Breaking

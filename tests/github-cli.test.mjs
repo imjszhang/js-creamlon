@@ -66,6 +66,15 @@ const AUTHORIZATION_KEYS_PATH = join(AUTHORIZATION_DIR, 'authorization.keys.json
 await writeFile(AUTHORIZATION_KEYS_PATH, `${JSON.stringify({ [AUTHORIZATION_KEY_ID]: AUTHORIZATION_SECRET })}\n`, 'utf8');
 after(() => rm(AUTHORIZATION_DIR, { recursive: true, force: true }));
 
+function assertPrivateMode(mode) {
+  if (process.platform !== 'win32') assert.equal(mode & 0o077, 0);
+}
+
+function restoreEnv(name, value) {
+  if (value == null) delete process.env[name];
+  else process.env[name] = value;
+}
+
 function taskYaml({ requestId, input = 'hello', includeAuthorization = true }) {
   const task = {
     version: '1',
@@ -911,8 +920,12 @@ test('verify loads public key rotations without a GitHub token', async () => {
   });
   const logs = [];
   const originalLog = console.log;
+  const originalGithubToken = process.env.GITHUB_TOKEN;
+  const originalGhToken = process.env.GH_TOKEN;
   console.log = (message) => logs.push(message);
   try {
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.GH_TOKEN;
     await runCli([
       'verify',
       '--repo', 'owner/repo',
@@ -920,6 +933,8 @@ test('verify loads public key rotations without a GitHub token', async () => {
       '--pretty',
     ]);
   } finally {
+    restoreEnv('GITHUB_TOKEN', originalGithubToken);
+    restoreEnv('GH_TOKEN', originalGhToken);
     console.log = originalLog;
     resetFetch();
     await rm(dir, { recursive: true, force: true });
@@ -941,7 +956,7 @@ test('hmac-key-new creates a private HMAC authorization key', async () => {
     await import('node:fs/promises').then((fs) => fs.chmod(keysPath, 0o644));
     await runCli(['hmac-key-new', '--key-id', 'customer-2', '--out', keysPath]);
     const mode = await import('node:fs/promises').then((fs) => fs.stat(keysPath));
-    assert.equal(mode.mode & 0o077, 0);
+    assertPrivateMode(mode.mode);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

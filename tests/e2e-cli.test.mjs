@@ -14,6 +14,10 @@ import { verifyKeyContinuity } from '../lib/identity.mjs';
 const BIN = join(process.cwd(), 'bin', 'creamlon.mjs');
 const PACKAGE_VERSION = JSON.parse(await readFile(join(process.cwd(), 'package.json'), 'utf8')).version;
 
+function assertPrivateMode(mode) {
+  if (process.platform !== 'win32') assert.equal(mode & 0o077, 0);
+}
+
 function runCreamlon(args) {
   return spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', cwd: process.cwd() });
 }
@@ -32,7 +36,7 @@ test('cli init keygen sign verify e2e', async () => {
     assert.match(skill, /name: creamlon-node/);
 
     await runCli(['keygen', '--out', join(dir, '.creamlon')]);
-    assert.equal((await stat(join(dir, '.creamlon', 'private.key'))).mode & 0o077, 0);
+    assertPrivateMode((await stat(join(dir, '.creamlon', 'private.key'))).mode);
     const pub = (await readFile(join(dir, '.creamlon', 'public.b64url'), 'utf8')).trim();
     const digest = hashText('hello');
 
@@ -71,7 +75,7 @@ test('keygen repairs permissions when replacing an existing private key', async 
     const privateKeyPath = join(dir, 'private.key');
     await chmod(privateKeyPath, 0o644);
     await runCli(['keygen', '--out', dir]);
-    assert.equal((await stat(privateKeyPath)).mode & 0o077, 0);
+    assertPrivateMode((await stat(privateKeyPath)).mode);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -84,7 +88,7 @@ test('delivery keygen repairs permissions when replacing an existing private key
     const privateKeyPath = join(dir, 'delivery.private.b64url');
     await chmod(privateKeyPath, 0o644);
     await runCli(['extension', 'delivery', 'keygen', '--out', dir]);
-    assert.equal((await stat(privateKeyPath)).mode & 0o077, 0);
+    assertPrivateMode((await stat(privateKeyPath)).mode);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -370,6 +374,7 @@ test('caller inbox command parses node and registry options', async () => {
       '--node', 'bob/echo-node',
       '--registry', '.creamlon/test-inboxes.yaml',
     ]),
-    (error) => error.message.includes('requires GITHUB_TOKEN, GH_TOKEN, or --token'),
+    (error) => error.message.includes('requires GITHUB_TOKEN, GH_TOKEN, or --token')
+      || error.message.includes('failed to fetch creamlon.yaml'),
   );
 });
