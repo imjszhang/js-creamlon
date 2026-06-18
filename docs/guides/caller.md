@@ -25,6 +25,9 @@ Check the repository, capability ID, media types, availability, identity
 fingerprint, access mode, and advertised extensions. Discovery history is
 self-published evidence, not a quality ranking.
 
+Use `creamlon inspect owner/repo --trust --pretty` when you also want the
+node's public trust status and key-continuity record.
+
 ## 2. Choose an input location
 
 A core task accepts exactly one input location:
@@ -61,7 +64,8 @@ GitHub ACL isolation.
 The public task still reveals the inbox repository, branch, artifact paths,
 immutable input commit, request ID, ephemeral public key, and input digest. Use
 `presigned-object-storage` for trial nodes or when standing repository access
-is undesirable.
+is undesirable. If you intentionally use a registry entry marked `trial` with
+GitHub delivery, pass `--allow-trial-inbox` to `extension delivery prepare`.
 
 For GitHub delivery, submission is deliberately upload-first:
 
@@ -96,6 +100,12 @@ an Issue, comment, log, or committed file.
 For a node using the optional HMAC authorization profile, also provide
 `--authorization-key-id`, `--keys`, and `--authorization-expires`.
 
+```bash
+--authorization-key-id customer-1 \
+--keys ./.creamlon/authorization.keys.json \
+--authorization-expires 2026-06-20T00:00:00Z
+```
+
 ## 4. Submit
 
 ```bash
@@ -116,7 +126,22 @@ For credential access, add:
 Record the returned Issue number. A credential-backed Issue exposes only the
 credential ID and a task-bound HMAC, not the credential secret.
 
-## 5. Verify
+## 5. Track or cancel
+
+```bash
+creamlon tasks owner/repo \
+  --requester github:your-user/your-repo \
+  --pretty
+
+creamlon cancel owner/repo <issue-number> \
+  --requester github:your-user/your-repo \
+  --reason "no longer needed" \
+  --pretty
+```
+
+`cancel` only closes tasks whose task body requester matches `--requester`.
+
+## 6. Verify
 
 ```bash
 creamlon fetch-proof owner/repo <issue-number> --verify --pretty

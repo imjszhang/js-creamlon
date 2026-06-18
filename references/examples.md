@@ -88,4 +88,5 @@ creamlon status --repo-path ./code-review-node --pretty
 ```
 
 For a node that declares the HMAC authorization profile, Alice adds the three
-authorization options shown in the main README.
+authorization options shown in the caller guide:
+`--authorization-key-id`, `--keys`, and `--authorization-expires`.

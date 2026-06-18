@@ -48,7 +48,8 @@ error output.
 `capability add` requires `--id`, `--description`, `--input-type`, and
 `--output-type`. `capability update` accepts the same fields but updates only
 the options supplied. `--access free|credential` records capability access
-policy.
+policy. `--units 1` can record the credential unit count for access-controlled
+capabilities.
 
 `payment set-provider` requires `--capability-id` and `--provider-id`, and can
 record `--resource-url`, `--price`, `--network`, `--asset`, `--pay-to`,
@@ -72,11 +73,13 @@ delivery tasks.
 `--requester <github:user/repo>`.
 
 `cancel <owner/repo> <issue-number> --requester <github:user/repo>` comments on
-and closes a task Issue only when the task body requester matches.
+and closes a task Issue only when the task body requester matches. Use
+`--reason <text>` to publish a caller-readable cancellation reason.
 
-`watch`, `deliver`, and `reject` are node-operator commands. `deliver` requires
-`--output-file`; extension delivery tasks must upload output first with
-`extension delivery send-output`.
+`watch`, `deliver`, and `reject` are node-operator commands. `watch --once`
+performs a single poll. `deliver` requires `--output-file`; use `--dry-run` to
+prepare without publishing and `--resume` after interruption. Extension
+delivery tasks must upload output first with `extension delivery send-output`.
 
 ## Access Commands
 
@@ -96,7 +99,8 @@ secrets.
 
 `audit` verifies local manifest, proof log, redemptions, and key continuity.
 `status` writes `trust/status.json` with audit health and delivery summary
-fields.
+fields. Use `--status-out <path>` to write somewhere other than the default
+trust file.
 
 `inspect <owner/repo> --trust` also reads public trust status and key
 continuity files.
@@ -108,9 +112,13 @@ continuity files.
 records that reached local `closed` status with a stored proof and whose remote
 Issue is already closed.
 
+`extension delivery fetch-output` verifies the proof and output digest by
+default; `--no-verify` skips that verification only when you have another trust
+path.
+
 ## Authentication
 
-`submit`, `deliver`, `reject`, and `caller inbox` management require
+`submit`, `deliver`, `reject`, `cancel`, and `caller inbox` management require
 `GITHUB_TOKEN`, `GH_TOKEN`, or `--token`. Public reads can run anonymously with
 lower rate limits.
 

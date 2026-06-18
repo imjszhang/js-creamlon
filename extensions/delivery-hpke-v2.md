@@ -215,7 +215,8 @@ Never commit outbox files or print private keys in logs.
 ### Node agent
 
 1. `watch` — validate task
-2. `extension delivery fetch-input` — decrypt and verify `task.input.digest`
+2. `extension delivery fetch-input --output-file ...` — decrypt input to a
+   local file and verify `task.input.digest`
 3. Execute capability locally
 4. `extension delivery send-output` — encrypt output and record its digest receipt
 5. `deliver --output-file ...` — verify the receipt, sign the plaintext digest,

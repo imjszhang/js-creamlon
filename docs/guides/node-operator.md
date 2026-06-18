@@ -87,6 +87,13 @@ creamlon watch owner/repo \
 Execute only tasks reported as valid. Reject malformed, unauthorized, expired,
 or unsupported tasks without signing a delivery proof.
 
+```bash
+creamlon reject owner/repo <issue-number> \
+  --repo-path ./my-node \
+  --reason "unsupported input" \
+  --pretty
+```
+
 For a `github-private-repo` delivery task, `fetch-input` and `send-output` use
 the node operator's `--token`, `GITHUB_TOKEN`, or `GH_TOKEN`. The caller must
 grant that token read/write contents access to the private inbox repository
@@ -95,6 +102,12 @@ Accept a pending invitation before running `fetch-input`. Callers can verify
 the resulting permission with `caller inbox check`. GitHub input tasks must
 contain `delivery.github.input_commit`; `fetch-input` reads that commit rather
 than the current branch head.
+
+```bash
+creamlon extension delivery fetch-input owner/repo <issue-number> \
+  --repo-path ./my-node \
+  --output-file ./input.bin
+```
 
 ## 5. Deliver a result
 
