@@ -14,6 +14,7 @@ import {
   DEFAULT_INBOX_REGISTRY,
   findInbox,
   readInboxRegistry,
+  removeInbox,
   updateInboxRegistry,
   upsertInbox,
 } from '../lib/inboxRegistry.mjs';
@@ -337,9 +338,39 @@ async function cmdRevoke(opts, ctx) {
   }, opts.pretty);
 }
 
+async function cmdList(opts, ctx) {
+  const registryPath = opts.registry || DEFAULT_INBOX_REGISTRY;
+  const registry = await readInboxRegistry(registryPath);
+  ctx.printJson({
+    ok: true,
+    registry: registryPath,
+    count: registry.inboxes.length,
+    inboxes: registry.inboxes,
+  }, opts.pretty);
+}
+
+async function cmdRemove(opts, ctx) {
+  const node = opts.node;
+  if (!node) throw usageError('caller inbox remove requires --node owner/repo');
+  const registryPath = opts.registry || DEFAULT_INBOX_REGISTRY;
+  const update = await updateInboxRegistry(registryPath, (current) => {
+    const entry = requireEntry(current, node);
+    return removeInbox(current, entry.node);
+  });
+  ctx.printJson({
+    ok: true,
+    registry: update.path,
+    node: String(node).toLowerCase(),
+    removed: true,
+  }, opts.pretty);
+}
+
 export async function cmdCaller(positional, opts, ctx) {
   if (positional[1] !== 'inbox') throw usageError('caller requires inbox');
   switch (positional[2]) {
+    case 'list':
+      await cmdList(opts, ctx);
+      break;
     case 'init':
       await cmdInit(opts, ctx);
       break;
@@ -355,8 +386,11 @@ export async function cmdCaller(positional, opts, ctx) {
     case 'revoke':
       await cmdRevoke(opts, ctx);
       break;
+    case 'remove':
+      await cmdRemove(opts, ctx);
+      break;
     default:
-      throw usageError('caller inbox requires init, grant, check, protect, or revoke');
+      throw usageError('caller inbox requires init, grant, check, protect, revoke, list, or remove');
   }
 }
 
@@ -368,6 +402,8 @@ Commands:
   check      Show caller-token and operator repository permissions
   protect    Block force-push and deletion on the inbox branch
   revoke     Remove collaborator access (repository owners are unchanged)
+  list       List registered inboxes
+  remove     Remove an inbox registry entry without deleting the repository
 
 Options:
   --node <owner/repo>                   Node repository

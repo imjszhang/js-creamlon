@@ -7,7 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { runCli } from '../cli/index.mjs';
 import { parseManifest, setManifestFetch, validateManifest } from '../lib/manifest.mjs';
 import { parseManifestPayment } from '../lib/extensions/payment/schema.mjs';
+import { parseManifestDelivery } from '../lib/extensions/delivery/schema.mjs';
 import { generateKeyPair } from '../lib/proof.mjs';
+import { generateDeliveryKeyPair } from '../lib/extensions/delivery/hpke.mjs';
 
 const BIN = join(process.cwd(), 'bin', 'creamlon.mjs');
 
@@ -94,6 +96,31 @@ test('capability add rejects duplicate ids', async () => {
     ]);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /capability already exists/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('capability update modifies only requested fields', async () => {
+  const dir = await createNode();
+  try {
+    const result = runCreamlon([
+      'capability', 'update',
+      '--repo-path', dir,
+      '--id', 'echo',
+      '--description', 'Updated echo',
+      '--input-type', 'text/plain,application/json',
+      '--access', 'credential',
+      '--pretty',
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    const manifest = await readManifest(dir);
+    assertManifestValid(manifest);
+    assert.equal(manifest.capabilities[0].description, 'Updated echo');
+    assert.deepEqual(manifest.capabilities[0].input.media_types, ['text/plain', 'application/json']);
+    assert.deepEqual(manifest.capabilities[0].output.media_types, ['text/plain']);
+    assert.equal(manifest.capabilities[0].access.mode, 'credential');
+    assert.equal(manifest.profiles.credential.scheme, 'voucher-hmac-v1');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -242,6 +269,52 @@ test('node set-status updates availability and rejects invalid status', async ()
     ]);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /available, busy, or offline/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('node set-name and set-description update node metadata', async () => {
+  const dir = await createNode();
+  try {
+    let result = runCreamlon(['node', 'set-name', 'new-name', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    result = runCreamlon(['node', 'set-description', 'New description', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    const manifest = await readManifest(dir);
+    assert.equal(manifest.name, 'new-name');
+    assert.equal(manifest.description, 'New description');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('delivery set-config and show-config manage manifest delivery extension', async () => {
+  const dir = await createNode();
+  try {
+    const deliveryKeys = generateDeliveryKeyPair();
+    let result = runCreamlon([
+      'delivery', 'set-config',
+      '--repo-path', dir,
+      '--scheme', 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+      '--receive-public-key', deliveryKeys.public_key,
+      '--transports', 'github-private-repo,presigned-object-storage',
+      '--presigned-hosts', 'storage.example,cdn.example',
+      '--github-input-path', 'tasks/{request_id}/input.enc',
+      '--github-output-path', 'tasks/{request_id}/output.enc',
+      '--pretty',
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    const manifest = await readManifest(dir);
+    const delivery = parseManifestDelivery(manifest);
+    assert.equal(delivery.receive_public_key, deliveryKeys.public_key);
+    assert.deepEqual(delivery.transports, ['github-private-repo', 'presigned-object-storage']);
+    assert.deepEqual(delivery.presigned_hosts, ['storage.example', 'cdn.example']);
+    assert.equal(delivery.github.inbox_path_template.input, 'tasks/{request_id}/input.enc');
+
+    result = runCreamlon(['delivery', 'show-config', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).delivery.receive_public_key, deliveryKeys.public_key);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

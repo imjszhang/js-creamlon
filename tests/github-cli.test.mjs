@@ -1,6 +1,6 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runCli } from '../cli/index.mjs';
@@ -1054,4 +1054,216 @@ test('inspect reports an invalid public key without crashing', async () => {
   assert.equal(result.valid, false);
   assert.equal(result.public_key_fingerprint, null);
   assert.ok(result.errors.includes('invalid identity.public_key'));
+});
+
+test('inspect --trust fetches trust status and key continuity', async () => {
+  const { publicKeyBase64Url } = await generateKeyPair(null);
+  installMockFetch((url) => {
+    if (url.includes('raw.githubusercontent.com')) {
+      return { status: 200, body: FREE_MANIFEST_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
+    }
+    if (url.includes('/contents/trust/status.json')) {
+      return {
+        status: 200,
+        body: {
+          type: 'file',
+          encoding: 'base64',
+          content: Buffer.from(JSON.stringify({ status: 'available', proofs_valid: true })).toString('base64'),
+        },
+      };
+    }
+    if (url.includes('/contents/trust/key-rotations.log')) {
+      return { status: 404, body: { message: 'not found' } };
+    }
+    return { status: 404, body: { message: 'not found' } };
+  });
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (message) => logs.push(message);
+  try {
+    await runCli(['inspect', 'owner/node', '--trust', '--pretty']);
+  } finally {
+    console.log = originalLog;
+    resetFetch();
+  }
+  const result = JSON.parse(logs.join('\n'));
+  assert.equal(result.trust_status.status, 'available');
+  assert.equal(result.key_continuity, 'unverified');
+});
+
+test('tasks lists task issues and cancel closes a task issue', async () => {
+  const { publicKeyBase64Url } = await generateKeyPair(null);
+  const task = parseTask(taskYaml({ requestId: 'req-task-list', includeAuthorization: false }));
+  const issueBody = serializeTask(task);
+  const calls = [];
+  installMockFetch((url, init = {}) => {
+    const path = new URL(url).pathname;
+    calls.push({ path, method: init.method || 'GET', body: init.body && JSON.parse(init.body) });
+    if (url.includes('raw.githubusercontent.com')) {
+      return { status: 200, body: FREE_MANIFEST_YAML.replace('PLACEHOLDER', publicKeyBase64Url) };
+    }
+    if (path === '/repos/owner/node/issues' && url.includes('state=all')) {
+      return {
+        status: 200,
+        body: [{
+          number: 5,
+          html_url: 'https://github.com/owner/node/issues/5',
+          title: '[task] echo',
+          body: issueBody,
+          state: 'open',
+          created_at: '2026-06-14T00:00:00Z',
+          updated_at: '2026-06-14T00:00:00Z',
+        }],
+      };
+    }
+    if (path === '/repos/owner/node/issues/5' && (init.method || 'GET') === 'GET') {
+      return {
+        status: 200,
+        body: {
+          number: 5,
+          html_url: 'https://github.com/owner/node/issues/5',
+          title: '[task] echo',
+          body: issueBody,
+          state: 'open',
+        },
+      };
+    }
+    if (path === '/repos/owner/node/issues/5/comments' && init.method === 'POST') {
+      return { status: 201, body: { id: 1 } };
+    }
+    if (path === '/repos/owner/node/issues/5' && init.method === 'PATCH') {
+      return { status: 200, body: { number: 5, state: 'closed' } };
+    }
+    return { status: 404, body: { message: 'not found' } };
+  });
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (message) => logs.push(message);
+  try {
+    await runCli(['tasks', 'owner/node', '--requester', 'github:alice/caller', '--pretty']);
+    await runCli([
+      'cancel', 'owner/node', '5',
+      '--requester', 'github:alice/caller',
+      '--reason', 'no longer needed',
+      '--token', 'test-token',
+      '--pretty',
+    ]);
+  } finally {
+    console.log = originalLog;
+    resetFetch();
+  }
+  const taskList = JSON.parse(logs[0]);
+  assert.equal(taskList.count, 1);
+  assert.equal(taskList.tasks[0].request_id, 'req-task-list');
+  const cancel = JSON.parse(logs[1]);
+  assert.equal(cancel.ok, true);
+  assert.equal(cancel.requester, 'github:alice/caller');
+  assert.ok(calls.some((call) => call.method === 'PATCH'));
+});
+
+test('cancel validates requester before closing a task issue', async () => {
+  const task = parseTask(taskYaml({ requestId: 'req-cancel-guard', includeAuthorization: false }));
+  const issueBody = serializeTask(task);
+  const calls = [];
+  installMockFetch((url, init = {}) => {
+    const path = new URL(url).pathname;
+    calls.push({ path, method: init.method || 'GET' });
+    if (path === '/repos/owner/node/issues/5') {
+      return {
+        status: 200,
+        body: {
+          number: 5,
+          html_url: 'https://github.com/owner/node/issues/5',
+          title: '[task] echo',
+          body: issueBody,
+          state: 'open',
+        },
+      };
+    }
+    return { status: 404, body: { message: 'not found' } };
+  });
+  try {
+    await assert.rejects(
+      () => runCli(['cancel', 'owner/node', '5', '--token', 'test-token']),
+      /cancel requires --requester/,
+    );
+    await assert.rejects(
+      () => runCli([
+        'cancel', 'owner/node', '5',
+        '--requester', 'github:bob/caller',
+        '--token', 'test-token',
+      ]),
+      /task requester does not match/,
+    );
+  } finally {
+    resetFetch();
+  }
+  assert.ok(!calls.some((call) => call.method === 'PATCH' || call.method === 'POST'));
+});
+
+test('credential show prints the complete credential and gc removes redeemed or expired records', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-credential-cli-'));
+  try {
+    const storePath = join(dir, '.creamlon', 'credentials.json');
+    const redemptionsPath = join(dir, 'trust', 'redemptions.log');
+    const first = generateCredential();
+    const second = generateCredential();
+    await writeCredentialStore(storePath, {
+      version: '1',
+      credentials: [
+        {
+          credential_id: first.credential_id,
+          secret: first.secret,
+          capability_id: 'echo',
+          status: 'available',
+          created_at: '2026-06-14T00:00:00Z',
+          expires: null,
+        },
+        {
+          credential_id: second.credential_id,
+          secret: second.secret,
+          capability_id: 'echo',
+          status: 'available',
+          created_at: '2026-06-14T00:00:00Z',
+          expires: '2000-01-01T00:00:00Z',
+        },
+      ],
+    });
+    await mkdir(join(dir, 'trust'), { recursive: true });
+    await writeFile(redemptionsPath, `${JSON.stringify({
+      version: '1',
+      request_id: 'req-redeemed',
+      credential_id: first.credential_id,
+      credential_digest: `sha256:${'a'.repeat(64)}`,
+      task_intent_digest: `sha256:${'b'.repeat(64)}`,
+      capability_id: 'echo',
+      redeemed_at: '2026-06-14T00:00:00Z',
+    })}\n`, 'utf8');
+
+    const logs = [];
+    const originalLog = console.log;
+    console.log = (message) => logs.push(message);
+    try {
+      await runCli([
+        'credential', 'show', first.credential_id,
+        '--repo-path', dir,
+        '--credentials', storePath,
+        '--pretty',
+      ]);
+      await runCli([
+        'credential', 'gc',
+        '--repo-path', dir,
+        '--credentials', storePath,
+        '--pretty',
+      ]);
+    } finally {
+      console.log = originalLog;
+    }
+    assert.equal(JSON.parse(logs[0]).credential, first.value);
+    assert.equal(JSON.parse(logs[1]).removed_count, 2);
+    const remaining = JSON.parse(await readFile(storePath, 'utf8'));
+    assert.deepEqual(remaining.credentials, []);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

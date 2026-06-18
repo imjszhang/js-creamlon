@@ -106,6 +106,82 @@ test('cli help reads its version from package metadata', () => {
   assert.match(result.stdout, new RegExp(`v${PACKAGE_VERSION.replaceAll('.', '\\.')}`));
 });
 
+test('cli help documents expanded subcommands', () => {
+  let result = runCreamlon(['help', 'credential']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /show <credential-id>/);
+  assert.match(result.stdout, /gc/);
+  assert.match(result.stdout, /displayed by create and show/);
+
+  result = runCreamlon(['help', 'capability']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /update --id <id>/);
+
+  result = runCreamlon(['help', 'node']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /set-name <name>/);
+});
+
+test('cli version commands print package version', () => {
+  for (const args of [['--version'], ['-V'], ['version']]) {
+    const result = runCreamlon(args);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), PACKAGE_VERSION);
+  }
+});
+
+test('cli can emit structured JSON errors', () => {
+  const result = runCreamlon(['unknown-command', '--json-errors']);
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stderr, '');
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.error, true);
+  assert.match(parsed.message, /unknown command/);
+  assert.equal(parsed.exit_code, result.status);
+});
+
+test('validate checks only the local manifest', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-validate-'));
+  try {
+    await runCli(['init', dir, '--name', 'validate-agent']);
+    const { publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon'));
+    const agentPath = join(dir, 'creamlon.yaml');
+    const agentText = (await readFile(agentPath, 'utf8'))
+      .replace('REPLACE_WITH_public.b64url', publicKeyBase64Url);
+    await writeFile(agentPath, agentText, 'utf8');
+    const result = runCreamlon(['validate', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).ok, true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('hmac key list revoke and rotate manage key ids without showing secrets', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-hmac-cli-'));
+  const keysPath = join(dir, 'authorization.keys.json');
+  try {
+    await writeFile(keysPath, `${JSON.stringify({ alpha: 'secret-a', beta: 'secret-b' })}\n`, 'utf8');
+    let result = runCreamlon(['hmac-key-list', '--keys', keysPath, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    let parsed = JSON.parse(result.stdout);
+    assert.deepEqual(parsed.keys.map((item) => item.key_id), ['alpha', 'beta']);
+    assert.doesNotMatch(result.stdout, /secret-a/);
+
+    result = runCreamlon(['hmac-key-rotate', '--keys', keysPath, '--key-id', 'alpha', '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    parsed = JSON.parse(await readFile(keysPath, 'utf8'));
+    assert.notEqual(parsed.alpha, 'secret-a');
+
+    result = runCreamlon(['hmac-key-revoke', '--keys', keysPath, '--key-id', 'beta', '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    parsed = JSON.parse(await readFile(keysPath, 'utf8'));
+    assert.deepEqual(Object.keys(parsed), ['alpha']);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('cli sign rejects invalid hash format', () => {
   const sign = runCreamlon([
     'sign',
@@ -123,6 +199,12 @@ test('cli rejects option without a value', () => {
   const result = runCreamlon(['inspect', 'owner/repo', '--token']);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /--token requires a value/);
+});
+
+test('caller inbox trust option still requires a value', () => {
+  const result = runCreamlon(['caller', 'inbox', 'init', '--trust', '--node', 'owner/repo']);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /--trust requires a value/);
 });
 
 test('cli init rejects file path', async () => {
@@ -290,6 +372,9 @@ test('status publishes audit health and key-rotate records continuity', async ()
     assert.equal(status.version, '1');
     assert.equal(status.status, 'available');
     assert.equal(status.proofs_valid, true);
+    assert.equal(status.capability_count, 1);
+    assert.equal(status.proof_count, 1);
+    assert.equal(status.last_delivery_at, '2026-06-13T00:00:00.000Z');
 
     await writeFile(
       agentPath,
@@ -306,6 +391,54 @@ test('status publishes audit health and key-rotate records continuity', async ()
     const rotations = await readFile(join(dir, 'trust', 'key-rotations.log'), 'utf8');
     assert.equal(verifyKeyContinuity(rotations, newKeys.publicKeyBase64Url).status, 'self_consistent');
     await runCli(['audit', '--repo-path', dir]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('proofs list and show inspect local proofs log', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-proofs-cli-'));
+  try {
+    await runCli(['init', dir, '--name', 'proofs-agent']);
+    const { privateKey, publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon'));
+    const agentPath = join(dir, 'creamlon.yaml');
+    const agentText = (await readFile(agentPath, 'utf8'))
+      .replace('REPLACE_WITH_public.b64url', publicKeyBase64Url);
+    await writeFile(agentPath, agentText, 'utf8');
+    const proof = signProof(buildProofFields({
+      requestId: 'req-proof-show',
+      capabilityId: 'echo',
+      inputDigest: hashText('in'),
+      outputDigest: hashText('out'),
+      completedAt: '2026-06-13T00:00:00.000Z',
+    }), privateKey);
+    await writeFile(join(dir, 'trust', 'proofs.log'), `${JSON.stringify(proof)}\n`, 'utf8');
+
+    let result = runCreamlon(['proofs', 'list', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).proofs[0].request_id, 'req-proof-show');
+
+    result = runCreamlon([
+      'proofs', 'show',
+      '--repo-path', dir,
+      '--request-id', 'req-proof-show',
+      '--pretty',
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).proof.request_id, 'req-proof-show');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('proofs list returns an empty list for a new node', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-empty-proofs-'));
+  try {
+    const result = runCreamlon(['proofs', 'list', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.proof_count, 0);
+    assert.deepEqual(parsed.proofs, []);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -77,7 +77,7 @@ import {
   validateTaskDelivery,
 } from '../lib/extensions/delivery/schema.mjs';
 import { parseManifestPayment } from '../lib/extensions/payment/schema.mjs';
-import { cmdCapability, cmdNode, cmdPayment } from './manifest-edit.mjs';
+import { cmdCapability, cmdDelivery, cmdNode, cmdPayment } from './manifest-edit.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -98,10 +98,11 @@ const VALUE_OPTIONS = new Set([
   '--github-repo', '--github-input-path', '--github-output-path', '--github-ref',
   '--task-file', '--manifest-file', '--receive-public-key', '--input-file', '--outbox', '--delivery-key',
   '--proof-file', '--no-verify',
-  '--node', '--registry', '--operator', '--trust', '--permission',
+  '--node', '--registry', '--operator', '--permission',
   '--id', '--description', '--access', '--units',
   '--provider-id', '--resource-url', '--price', '--network', '--asset',
   '--pay-to', '--facilitator', '--checkout-url', '--instructions',
+  '--scheme', '--transports', '--presigned-hosts',
 ]);
 
 const HELP = {
@@ -117,6 +118,9 @@ Commands:
   credential create [options]       Create a one-time task credential
   credential list [options]         List credential status without secrets
   credential revoke <id> [options]  Revoke an unused credential
+  hmac-key-list [options]           List configured HMAC authorization key ids
+  hmac-key-revoke [options]         Remove an HMAC authorization key
+  hmac-key-rotate [options]         Replace an HMAC authorization key secret
   hash <text>                       Hash text as sha256:...
   hash --file <path>                Hash file contents
   sign [options]                    Sign and output proof JSON
@@ -125,12 +129,17 @@ Commands:
   discover <capability-id>          Find nodes via GitHub Topic search
   capability <cmd>                  Manage local creamlon.yaml capabilities
   payment <cmd>                     Manage local payment provider hints
+  delivery <cmd>                    Manage local delivery extension config
   node set-status <status>          Set local node availability status
+  validate [--repo-path <dir>]      Validate local creamlon.yaml
   submit <owner/repo> [options]     Create task Issue (needs GITHUB_TOKEN)
+  tasks <owner/repo> [options]      List submitted task Issues
+  cancel <owner/repo> <issue#>      Cancel a task Issue
   watch <owner/repo> [options]      List pending tasks (needs GITHUB_TOKEN)
   deliver <owner/repo> <issue#>     Sign and deliver proof (needs GITHUB_TOKEN)
   reject <owner/repo> <issue#>      Reject task Issue (needs GITHUB_TOKEN)
   fetch-proof <owner/repo> <issue#> Extract proof from Issue comments
+  proofs <cmd>                      List or show local proof log entries
   audit [--repo-path <dir>]          Audit local proofs.log
   status [--repo-path <dir>]         Write public node health status
   init <dir> [--name <name>]        Scaffold agent node from template
@@ -157,19 +166,30 @@ Appends a signed record to trust/key-rotations.log.`,
   hmacKeyNew: `creamlon hmac-key-new --key-id <id> [--out <path>]
 
 Generate an HMAC authorization key map (default: .creamlon/authorization.keys.json).`,
-  credential: `creamlon credential <create|list|revoke> [options]
+  hmacKeyList: `creamlon hmac-key-list [--keys <path>] [--pretty]
+
+List configured HMAC authorization key ids without displaying secrets.`,
+  hmacKeyRevoke: `creamlon hmac-key-revoke --key-id <id> [--keys <path>] [--pretty]
+
+Remove an HMAC authorization key from the private key map.`,
+  hmacKeyRotate: `creamlon hmac-key-rotate --key-id <id> [--keys <path>] [--pretty]
+
+Replace an HMAC authorization key secret in the private key map.`,
+  credential: `creamlon credential <create|list|show|revoke|gc> [options]
 
 Commands:
   create --capability-id <id> [--expires <iso>]
   list
+  show <credential-id>
   revoke <credential-id>
+  gc
 
 Options:
   --repo-path <dir>      Node repository (default: .)
   --credentials <path>   Private store (default: <repo>/.creamlon/credentials.json)
   --pretty               Pretty-print JSON
 
-The complete credential is displayed only by create. Keep it secret.`,
+The complete credential is displayed by create and show. Keep it secret.`,
   caller: CALLER_HELP,
   hash: `creamlon hash <text>
 creamlon hash --file <path>
@@ -201,11 +221,13 @@ Options:
   --pretty              Pretty-print JSON result`,
   inspect: `creamlon inspect <owner/repo> [--ref main]
 
-Fetch creamlon.yaml from GitHub and display capabilities, delivery, and payment hints.`,
-  capability: `creamlon capability <add|remove|list> [options]
+Fetch creamlon.yaml from GitHub and display capabilities, delivery, and payment hints.
+Use --trust to also fetch trust/status.json and key rotation continuity.`,
+  capability: `creamlon capability <add|update|remove|list> [options]
 
 Commands:
   add --id <id> --description <text> --input-type <type[,type]> --output-type <type[,type]>
+  update --id <id> [--description <text>] [--input-type <type[,type]>] [--output-type <type[,type]>]
   remove --id <id>
   list
 
@@ -232,9 +254,26 @@ Options:
   --instructions <text>   Top-level payment instructions
   --repo-path <dir>       Node repository (default: .)
   --pretty                Pretty-print JSON`,
-  node: `creamlon node set-status <available|busy|offline> [--repo-path <dir>] [--pretty]
+  delivery: `creamlon delivery <set-config|show-config> [options]
 
-Set the local node availability status in creamlon.yaml.`,
+Commands:
+  set-config [--scheme <id>] [--receive-public-key <b64>] [--transports <id[,id]>]
+  show-config
+
+Options:
+  --presigned-hosts <host[,host]>  Allowed presigned storage hosts
+  --github-input-path <template>   Default GitHub input path template
+  --github-output-path <template>  Default GitHub output path template
+  --repo-path <dir>                Node repository (default: .)
+  --pretty                         Pretty-print JSON`,
+  node: `creamlon node <set-status|set-name|set-description> [options]
+
+Commands:
+  set-status <available|busy|offline>
+  set-name <name>
+  set-description <text>
+
+Update local node metadata in creamlon.yaml.`,
   discover: `creamlon discover <capability-id> [options]
 
 Find nodes through the required GitHub Topic "creamlon-node".
@@ -270,6 +309,23 @@ Options:
   --ref <branch>         creamlon.yaml branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --pretty               Pretty-print result JSON`,
+  validate: `creamlon validate [--repo-path <dir>] [--pretty]
+
+Validate local creamlon.yaml without auditing proof logs.`,
+  tasks: `creamlon tasks <owner/repo> [options]
+
+Options:
+  --requester <github:user/repo>  Filter tasks by requester
+  --ref <branch>                  creamlon.yaml branch (default: main)
+  --token <pat>                   GitHub token (or GITHUB_TOKEN / GH_TOKEN)
+  --pretty                        Pretty-print JSON`,
+  cancel: `creamlon cancel <owner/repo> <issue-number> [options]
+
+Options:
+  --requester <github:user/repo>  Required; must match the task requester
+  --reason <text>        Cancellation reason
+  --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
+  --pretty               Pretty-print JSON`,
   watch: `creamlon watch <owner/repo> [options]
 
 Options:
@@ -310,6 +366,13 @@ Options:
   --ref <branch>         creamlon.yaml branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --pretty               Pretty-print JSON`,
+  proofs: `creamlon proofs <list|show> [options]
+
+Commands:
+  list [--repo-path <dir>] [--limit <count>]
+  show --request-id <id> [--repo-path <dir>]
+
+Inspect local trust/proofs.log entries.`,
   audit: `creamlon audit [--repo-path <dir>] [--pretty]
 
 Validate local creamlon.yaml and every proof in trust/proofs.log.`,
@@ -335,6 +398,7 @@ function parseArgs(argv) {
     else if (arg === '--dry-run') opts.dryRun = true;
     else if (arg === '--resume') opts.resume = true;
     else if (arg === '--refresh') opts.refresh = true;
+    else if (arg === '--json-errors') opts.jsonErrors = true;
     else if (arg === '--out') { i += 1; opts.out = argv[i]; }
     else if (arg === '--file') { i += 1; opts.file = argv[i]; }
     else if (arg === '--request-id') { i += 1; opts.requestId = argv[i]; }
@@ -403,7 +467,15 @@ function parseArgs(argv) {
     else if (arg === '--node') { i += 1; opts.node = argv[i]; }
     else if (arg === '--registry') { i += 1; opts.registry = argv[i]; }
     else if (arg === '--operator') { i += 1; opts.operator = argv[i]; }
-    else if (arg === '--trust') { i += 1; opts.trust = argv[i]; }
+    else if (arg === '--trust') {
+      if (positional[0] === 'inspect' && (argv[i + 1] == null || argv[i + 1].startsWith('--'))) {
+        opts.trustRecords = true;
+      } else if (argv[i + 1] != null && !argv[i + 1].startsWith('--')) {
+        i += 1; opts.trust = argv[i];
+      } else {
+        throw usageError('--trust requires a value');
+      }
+    }
     else if (arg === '--permission') { i += 1; opts.permission = argv[i]; }
     else if (arg === '--id') { i += 1; opts.id = argv[i]; }
     else if (arg === '--description') { i += 1; opts.description = argv[i]; }
@@ -418,6 +490,9 @@ function parseArgs(argv) {
     else if (arg === '--facilitator') { i += 1; opts.facilitator = argv[i]; }
     else if (arg === '--checkout-url') { i += 1; opts.checkoutUrl = argv[i]; }
     else if (arg === '--instructions') { i += 1; opts.instructions = argv[i]; }
+    else if (arg === '--scheme') { i += 1; opts.scheme = argv[i]; }
+    else if (arg === '--transports') { i += 1; opts.transports = argv[i]; }
+    else if (arg === '--presigned-hosts') { i += 1; opts.presignedHosts = argv[i]; }
     else if (arg.startsWith('--')) throw usageError(`unknown option: ${arg}`);
     else positional.push(arg);
   }
@@ -593,6 +668,7 @@ async function cmdInspect(positional, opts) {
   const slug = positional[1];
   if (!slug) throw usageError('inspect requires <owner/repo>');
   const { owner, repo } = parseRepoSlug(slug);
+  const token = resolveToken(opts);
   const { parsed, url } = await fetchManifest(owner, repo, opts.ref || 'main');
   const errors = validateManifest(parsed, { requireGithubProfile: true });
   const out = {
@@ -610,6 +686,16 @@ async function cmdInspect(positional, opts) {
   if (delivery) out.delivery_extension = delivery;
   const payment = parseManifestPayment(parsed);
   if (payment) out.payment_extension = payment;
+  if (opts.trustRecords) {
+    const [statusText, rotationsText] = await Promise.all([
+      getRepositoryFile(owner, repo, 'trust/status.json', opts.ref || 'main', token, { optional: true }),
+      getRepositoryFile(owner, repo, 'trust/key-rotations.log', opts.ref || 'main', token, { optional: true }),
+    ]);
+    out.trust_status = statusText ? JSON.parse(statusText) : null;
+    out.key_continuity = parsed.identity?.public_key
+      ? inspectKeyContinuity(rotationsText || '', parsed.identity.public_key).status
+      : null;
+  }
   printJson(out, opts.pretty);
 }
 
@@ -666,6 +752,33 @@ async function cmdDiscover(positional, opts) {
   });
   await writeDiscoveryCache(cachePath, cacheKey, result);
   printJson({ ...result, cached: false }, opts.pretty);
+}
+
+async function cmdValidate(opts) {
+  const repoPath = resolve(opts.repoPath || '.');
+  let manifest = null;
+  let errors = [];
+  try {
+    manifest = parseManifest(await readFile(join(repoPath, 'creamlon.yaml'), 'utf8'));
+    errors = validateManifest(manifest, { requireGithubProfile: true });
+    if (manifest?.identity?.public_key) {
+      try {
+        publicKeyFromBase64Url(manifest.identity.public_key);
+      } catch (error) {
+        errors.push(`invalid identity.public_key: ${error.message}`);
+      }
+    }
+  } catch (error) {
+    errors = [error.message];
+  }
+  const result = {
+    ok: errors.length === 0,
+    path: join(repoPath, 'creamlon.yaml'),
+    manifest,
+    errors,
+  };
+  printJson(result, opts.pretty);
+  if (!result.ok) fail('validate failed');
 }
 
 async function cmdSubmit(positional, opts) {
@@ -1144,6 +1257,131 @@ async function cmdFetchProof(positional, opts) {
   }
 }
 
+async function cmdTasks(positional, opts) {
+  const slug = positional[1];
+  if (!slug) throw usageError('tasks requires <owner/repo>');
+  const token = resolveToken(opts);
+  const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
+  const issues = await listIssues(owner, repo, { state: 'all', token });
+  const taskIssues = issues
+    .filter((issue) => isTaskIssue(issue.title) && !issue.pull_request)
+    .sort(compareIssueCreationOrder);
+  const tasks = [];
+  for (const issue of taskIssues) {
+    try {
+      const task = parseTask(issue.body || '');
+      if (opts.requester && task.requester !== opts.requester) continue;
+      let proof = null;
+      let binding = null;
+      if (issue.state === 'closed') {
+        const comments = await getIssueComments(owner, repo, issue.number, token);
+        const inputDigest = resolveInputDigest(task);
+        const extracted = extractBoundProofFromComments(comments, task, inputDigest, { manifest: parsed });
+        proof = extracted.proof;
+        binding = proof ? verifyProofBinding(proof, task, inputDigest, { manifest: parsed }) : null;
+      }
+      tasks.push({
+        issue_number: issue.number,
+        issue_url: issue.html_url,
+        state: issue.state,
+        title: issue.title,
+        request_id: task.request_id,
+        capability_id: task.capability_id,
+        requester: task.requester,
+        created_at: issue.created_at || null,
+        updated_at: issue.updated_at || null,
+        closed_at: issue.closed_at || null,
+        has_proof: !!proof,
+        binding_ok: binding ? binding.ok : null,
+      });
+    } catch (error) {
+      tasks.push({
+        issue_number: issue.number,
+        issue_url: issue.html_url,
+        state: issue.state,
+        title: issue.title,
+        request_id: null,
+        capability_id: null,
+        requester: null,
+        valid: false,
+        errors: [error.message],
+      });
+    }
+  }
+  printJson({
+    repo: `${owner}/${repo}`,
+    count: tasks.length,
+    tasks,
+  }, opts.pretty);
+}
+
+async function cmdCancel(positional, opts) {
+  const slug = positional[1];
+  const issueNumber = positional[2];
+  if (!slug) throw usageError('cancel requires <owner/repo> <issue-number>');
+  if (!issueNumber) throw usageError('cancel requires <issue-number>');
+  if (!/^[1-9]\d*$/.test(issueNumber)) throw usageError('cancel issue number must be a positive integer');
+  if (!opts.requester) throw usageError('cancel requires --requester');
+  const token = resolveToken(opts);
+  const { owner, repo } = parseRepoSlug(slug);
+  const issue = await getIssue(owner, repo, issueNumber, token);
+  if (!isTaskIssue(issue.title)) fail('issue is not a Creamlon task Issue', 4);
+  const task = parseTask(issue.body || '');
+  if (issue.title !== taskIssueTitle(task.capability_id)) {
+    fail('issue title capability does not match task capability_id', 4);
+  }
+  if (task.requester !== opts.requester) {
+    fail('task requester does not match --requester', 4);
+  }
+  const reason = opts.reason || 'task cancelled by requester';
+  await createIssueComment(owner, repo, issueNumber, `Creamlon cancellation:\n\n${reason}`, token);
+  if (issue.state !== 'closed') await closeIssue(owner, repo, issueNumber, token);
+  printJson({
+    ok: true,
+    issue_number: Number(issueNumber),
+    request_id: task.request_id,
+    requester: task.requester,
+    reason,
+  }, opts.pretty);
+}
+
+async function cmdProofs(positional, opts) {
+  const action = positional[1];
+  const repoPath = resolve(opts.repoPath || '.');
+  const proofsPath = join(repoPath, 'trust', 'proofs.log');
+  const logText = await readFile(proofsPath, 'utf8').catch((error) => {
+    if (error.code === 'ENOENT') return '';
+    throw error;
+  });
+  const proofs = parseProofsLog(logText);
+  if (action === 'list') {
+    const limit = opts.limit == null ? null : Number(opts.limit);
+    if (limit != null && (!Number.isInteger(limit) || limit < 1)) {
+      throw usageError('proofs list --limit must be a positive integer');
+    }
+    const selected = limit == null ? proofs : proofs.slice(-limit);
+    printJson({
+      path: proofsPath,
+      proof_count: proofs.length,
+      proofs: selected.reverse().map((proof) => ({
+        request_id: proof.request_id,
+        capability_id: proof.capability_id,
+        completed_at: proof.completed_at,
+        output_digest: proof.output_digest,
+      })),
+    }, opts.pretty);
+    return;
+  }
+  if (action === 'show') {
+    if (!opts.requestId) throw usageError('proofs show requires --request-id');
+    const proof = findProofByRequestId(proofs, opts.requestId);
+    if (!proof) fail(`unknown proof request_id: ${opts.requestId}`, 4);
+    printJson({ path: proofsPath, proof }, opts.pretty);
+    return;
+  }
+  throw usageError('proofs requires list or show');
+}
+
 async function auditRepository(repoPath) {
   const manifest = parseManifest(await readFile(join(repoPath, 'creamlon.yaml'), 'utf8'));
   const manifestErrors = validateManifest(manifest, { requireGithubProfile: true });
@@ -1240,15 +1478,30 @@ async function auditRepository(repoPath) {
     && continuity.status !== 'broken'
     && entries.every((entry) => entry.verify.ok && entry.duplicate == null)
     && redemptionEntries.every((entry) => entry.errors.length === 0);
+  const suggestions = [];
+  if (manifestErrors.length) suggestions.push('Fix creamlon.yaml and run creamlon validate before auditing proofs.');
+  if (continuity.status === 'broken') suggestions.push('Repair trust/key-rotations.log or record a valid rotation with creamlon key-rotate.');
+  if (entries.some((entry) => !entry.verify.ok)) suggestions.push('Check proof signatures and ensure identity.public_key matches the signing key at completed_at.');
+  if (entries.some((entry) => entry.duplicate === 'conflict')) suggestions.push('Remove or investigate conflicting proofs with the same request_id.');
+  if (redemptionEntries.some((entry) => entry.errors.length)) suggestions.push('Repair trust/redemptions.log so each credential redemption matches a credential proof.');
+  const completedTimes = [];
+  for (const proof of proofByRequest.values()) {
+    const time = Date.parse(proof.completed_at || '');
+    if (!Number.isNaN(time)) completedTimes.push(time);
+  }
   return {
     ok,
     manifest_errors: manifestErrors,
     key_continuity: continuity.status,
     key_errors: continuity.errors,
     proof_count: entries.length,
+    last_delivery_at: completedTimes.length
+      ? new Date(Math.max(...completedTimes)).toISOString()
+      : null,
     entries,
     redemption_count: redemptionEntries.length,
     redemptions: redemptionEntries,
+    suggestions,
   };
 }
 
@@ -1267,6 +1520,9 @@ async function cmdStatus(opts) {
     status: manifest.status,
     checked_at: new Date().toISOString(),
     proofs_valid: result.ok,
+    capability_count: manifest.capabilities?.length || 0,
+    proof_count: result.proof_count,
+    last_delivery_at: result.last_delivery_at,
   };
   const outPath = resolve(opts.statusOut || join(repoPath, 'trust', 'status.json'));
   await mkdir(dirname(outPath), { recursive: true });
@@ -1339,6 +1595,72 @@ async function cmdHmacKeyNew(opts) {
   console.log(`HMAC authorization key written to ${outPath}`);
 }
 
+function hmacKeysPath(opts) {
+  return resolve(opts.keys || '.creamlon/authorization.keys.json');
+}
+
+async function readHmacKeyObject(path) {
+  try {
+    const parsed = JSON.parse(await readFile(path, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('invalid HMAC key map');
+    }
+    return parsed;
+  } catch (error) {
+    if (error.code === 'ENOENT') return {};
+    throw error;
+  }
+}
+
+async function writeHmacKeyObject(path, keys) {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(keys, null, 2)}\n`, { flag: 'w', mode: 0o600 });
+  await chmod(path, 0o600);
+}
+
+async function cmdHmacKeyList(opts) {
+  const path = hmacKeysPath(opts);
+  const keys = await readHmacKeyObject(path);
+  printJson({
+    path,
+    key_count: Object.keys(keys).length,
+    keys: Object.keys(keys).sort().map((keyId) => ({ key_id: keyId })),
+  }, opts.pretty);
+}
+
+async function cmdHmacKeyRevoke(opts) {
+  if (!opts.authorizationKeyId) throw usageError('hmac-key-revoke requires --key-id');
+  const path = hmacKeysPath(opts);
+  const keys = await readHmacKeyObject(path);
+  if (!Object.hasOwn(keys, opts.authorizationKeyId)) {
+    fail(`unknown authorization key: ${opts.authorizationKeyId}`, 4);
+  }
+  delete keys[opts.authorizationKeyId];
+  await writeHmacKeyObject(path, keys);
+  printJson({
+    ok: true,
+    path,
+    revoked_key_id: opts.authorizationKeyId,
+    key_count: Object.keys(keys).length,
+  }, opts.pretty);
+}
+
+async function cmdHmacKeyRotate(opts) {
+  if (!opts.authorizationKeyId) throw usageError('hmac-key-rotate requires --key-id');
+  const path = hmacKeysPath(opts);
+  const keys = await readHmacKeyObject(path);
+  if (!Object.hasOwn(keys, opts.authorizationKeyId)) {
+    fail(`unknown authorization key: ${opts.authorizationKeyId}`, 4);
+  }
+  keys[opts.authorizationKeyId] = generateHmacSecret(randomBytes(32));
+  await writeHmacKeyObject(path, keys);
+  printJson({
+    ok: true,
+    path,
+    rotated_key_id: opts.authorizationKeyId,
+  }, opts.pretty);
+}
+
 async function cmdCredential(positional, opts) {
   const action = positional[1];
   const { storePath, redemptionsPath } = credentialPaths(opts);
@@ -1379,6 +1701,50 @@ async function cmdCredential(positional, opts) {
     return;
   }
 
+  if (action === 'show') {
+    const credentialId = positional[2];
+    if (!credentialId) throw usageError('credential show requires <credential-id>');
+    const store = await loadCredentialStore(storePath);
+    const record = findCredential(store, credentialId);
+    if (!record) fail(`unknown credential_id: ${credentialId}`, 4);
+    printJson({
+      ...publicCredentialRecord(record, redemptions),
+      credential: `crv1_${record.credential_id}.${record.secret}`,
+      store: storePath,
+      warning: 'Keep the complete credential secret.',
+    }, opts.pretty);
+    return;
+  }
+
+  if (action === 'gc') {
+    const now = Date.now();
+    const redeemed = new Set(redemptions.map((item) => item.credential_id));
+    let removed = [];
+    await updateCredentialStore(storePath, (store) => {
+      const keep = [];
+      for (const record of store.credentials) {
+        const expired = !!record.expires && Date.parse(record.expires) < now;
+        const wasRedeemed = redeemed.has(record.credential_id);
+        if (expired || wasRedeemed) {
+          removed.push({
+            credential_id: record.credential_id,
+            reason: wasRedeemed ? 'redeemed' : 'expired',
+          });
+        } else {
+          keep.push(record);
+        }
+      }
+      store.credentials = keep;
+    });
+    printJson({
+      ok: true,
+      store: storePath,
+      removed_count: removed.length,
+      removed,
+    }, opts.pretty);
+    return;
+  }
+
   if (action === 'revoke') {
     const credentialId = positional[2];
     if (!credentialId) throw usageError('credential revoke requires <credential-id>');
@@ -1396,7 +1762,7 @@ async function cmdCredential(positional, opts) {
     return;
   }
 
-  throw usageError('credential requires create, list, or revoke');
+  throw usageError('credential requires create, list, show, revoke, or gc');
 }
 
 async function copyTemplate(src, dest, name) {
@@ -1446,9 +1812,16 @@ async function readStdin() {
 
 export async function runCli(argv) {
   const [cmd, ...rest] = argv;
+  if (cmd === '--version' || cmd === '-V' || cmd === 'version') {
+    console.log(PACKAGE_VERSION);
+    return;
+  }
   if (!cmd || cmd === 'help' || cmd === '-h' || cmd === '--help') {
     const topic = rest[0];
     const helpKey = topic === 'hmac-key-new' ? 'hmacKeyNew'
+      : topic === 'hmac-key-list' ? 'hmacKeyList'
+        : topic === 'hmac-key-revoke' ? 'hmacKeyRevoke'
+          : topic === 'hmac-key-rotate' ? 'hmacKeyRotate'
       : topic === 'fetch-proof' ? 'fetchProof'
         : topic === 'key-rotate' ? 'keyRotate'
           : topic === 'extension' && rest[1] === 'delivery' ? 'extensionDelivery'
@@ -1470,6 +1843,15 @@ export async function runCli(argv) {
       break;
     case 'hmac-key-new':
       await cmdHmacKeyNew(opts);
+      break;
+    case 'hmac-key-list':
+      await cmdHmacKeyList(opts);
+      break;
+    case 'hmac-key-revoke':
+      await cmdHmacKeyRevoke(opts);
+      break;
+    case 'hmac-key-rotate':
+      await cmdHmacKeyRotate(opts);
       break;
     case 'credential':
       await cmdCredential(positional, opts);
@@ -1495,11 +1877,23 @@ export async function runCli(argv) {
     case 'payment':
       await cmdPayment(positional, opts, { printJson });
       break;
+    case 'delivery':
+      await cmdDelivery(positional, opts, { printJson });
+      break;
     case 'node':
       await cmdNode(positional, opts, { printJson });
       break;
+    case 'validate':
+      await cmdValidate(opts);
+      break;
     case 'submit':
       await cmdSubmit(positional, opts);
+      break;
+    case 'tasks':
+      await cmdTasks(positional, opts);
+      break;
+    case 'cancel':
+      await cmdCancel(positional, opts);
       break;
     case 'watch':
       await cmdWatch(positional, opts);
@@ -1512,6 +1906,9 @@ export async function runCli(argv) {
       break;
     case 'fetch-proof':
       await cmdFetchProof(positional, opts);
+      break;
+    case 'proofs':
+      await cmdProofs(positional, opts);
       break;
     case 'audit':
       await cmdAudit(opts);

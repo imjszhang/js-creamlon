@@ -22,6 +22,8 @@ import {
   cmdExtensionDeliveryPrepare,
   cmdExtensionDeliverySendInput,
   cmdExtensionDeliverySendOutput,
+  cmdExtensionDeliveryStatus,
+  cmdExtensionDeliveryCleanup,
 } from '../cli/extensionDelivery.mjs';
 import { writeInboxRegistry } from '../lib/inboxRegistry.mjs';
 import { setGithubFetch } from '../lib/github.mjs';
@@ -672,4 +674,78 @@ test('send-output records a digest-bound receipt for deliver', async () => {
   ));
   assert.equal(receipt.request_id, task.request_id);
   assert.equal(receipt.output_digest, hashBuffer('result'));
+});
+
+test('delivery status lists local state and cleanup removes closed issue state', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-delivery-status-'));
+  const outboxDir = join(dir, '.creamlon', 'outbox');
+  const deliveriesDir = join(dir, '.creamlon', 'deliveries');
+  await mkdir(outboxDir, { recursive: true });
+  await mkdir(deliveriesDir, { recursive: true });
+  await writeFile(join(outboxDir, 'req-cleanup.json'), `${JSON.stringify({
+    request_id: 'req-cleanup',
+    transport: 'github-private-repo',
+  })}\n`, 'utf8');
+  await writeFile(join(outboxDir, 'req-rejected.json'), `${JSON.stringify({
+    request_id: 'req-rejected',
+    transport: 'github-private-repo',
+  })}\n`, 'utf8');
+  await writeFile(join(deliveriesDir, '7.json'), `${JSON.stringify({
+    version: '1',
+    issue_number: 7,
+    request_id: 'req-cleanup',
+    status: 'closed',
+    proof: { request_id: 'req-cleanup' },
+  })}\n`, 'utf8');
+  await writeFile(join(deliveriesDir, '8.json'), `${JSON.stringify({
+    version: '1',
+    issue_number: 8,
+    request_id: 'req-rejected',
+    status: 'closed',
+  })}\n`, 'utf8');
+
+  const output = [];
+  await cmdExtensionDeliveryStatus(
+    { repoPath: dir },
+    { printJson: (value) => output.push(value) },
+  );
+  assert.equal(output.at(-1).outbox_count, 2);
+  assert.equal(output.at(-1).delivery_state_count, 2);
+
+  setGithubFetch(async (url) => {
+    const path = new URL(url).pathname;
+    if (path === '/repos/owner/repo/issues/7' || path === '/repos/owner/repo/issues/8') {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ number: Number(path.split('/').at(-1)), state: 'closed' }),
+      };
+    }
+    return {
+      ok: false,
+      status: 404,
+      text: async () => JSON.stringify({ message: 'not found' }),
+    };
+  });
+  try {
+    await cmdExtensionDeliveryCleanup(
+      ['extension', 'delivery', 'cleanup', 'owner/repo'],
+      { repoPath: dir, token: 'node-token' },
+      {
+        resolveToken: (opts) => opts.token,
+        printJson: (value) => output.push(value),
+      },
+    );
+  } finally {
+    setGithubFetch(globalThis.fetch);
+  }
+  assert.equal(output.at(-1).removed_count, 2);
+  await cmdExtensionDeliveryStatus(
+    { repoPath: dir },
+    { printJson: (value) => output.push(value) },
+  );
+  assert.equal(output.at(-1).outbox_count, 1);
+  assert.equal(output.at(-1).delivery_state_count, 1);
+  assert.deepEqual(output.at(-1).outboxes.map((item) => item.request_id), ['req-rejected']);
+  assert.deepEqual(output.at(-1).deliveries.map((item) => item.request_id), ['req-rejected']);
 });

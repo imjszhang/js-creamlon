@@ -139,6 +139,13 @@ test('caller inbox init, grant, check, and revoke manage a per-node repository',
   assert.equal(entry.grant, null);
   assert.ok(calls.some((call) => call.path === '/user/repos' && call.method === 'POST'));
   assert.ok(calls.some((call) => call.method === 'DELETE'));
+
+  await cmdCaller(['caller', 'inbox', 'list'], { registry: registryPath }, ctx);
+  assert.equal(output.at(-1).count, 1);
+  assert.equal(output.at(-1).inboxes[0].node, base.node);
+
+  await cmdCaller(['caller', 'inbox', 'remove'], base, ctx);
+  assert.equal(findInbox(await readInboxRegistry(registryPath), base.node), null);
 });
 
 test('same-account inbox access does not add or remove the repository owner', async () => {

@@ -1,5 +1,6 @@
 import { isMap, isSeq } from 'yaml';
 import { parseManifestPayment } from '../lib/extensions/payment/schema.mjs';
+import { parseManifestDelivery } from '../lib/extensions/delivery/schema.mjs';
 import {
   deleteEmptyPayment,
   ensureMap,
@@ -41,6 +42,11 @@ function splitMediaTypes(value, optionName) {
   return items;
 }
 
+function splitCsv(value) {
+  if (value == null) return null;
+  return String(value).split(',').map((item) => item.trim()).filter(Boolean);
+}
+
 function capabilityId(item) {
   return isMap(item) ? item.get('id') : null;
 }
@@ -49,6 +55,16 @@ function findCapabilitySeq(doc) {
   const seq = getSeq(doc, 'capabilities');
   if (!seq) fail('creamlon.yaml capabilities must be a sequence');
   return seq;
+}
+
+function ensureMapForNode(doc, node, key) {
+  let value = node.get(key, true);
+  if (value == null) {
+    value = doc.createNode({});
+    node.set(key, value);
+  }
+  if (!isMap(value)) fail(`capability ${key} must be a mapping`);
+  return value;
 }
 
 function assertCapabilityExists(doc, id) {
@@ -114,6 +130,38 @@ async function addCapability(opts, ctx) {
   }), opts.pretty);
 }
 
+async function updateCapability(opts, ctx) {
+  if (!opts.id) throw usageError('capability update requires --id');
+  if (opts.access && !['free', 'credential'].includes(opts.access)) {
+    throw usageError('capability update --access must be free or credential');
+  }
+  const units = opts.units == null ? 1 : Number(opts.units);
+  if (opts.access && units !== 1) throw usageError('capability update --units must be 1');
+  const result = await updateManifestDocument(opts.repoPath || '.', async (doc) => {
+    const capabilities = findCapabilitySeq(doc);
+    const item = capabilities.items.find((candidate) => capabilityId(candidate) === opts.id);
+    if (!isMap(item)) fail(`unknown capability id: ${opts.id}`, 4);
+    if (opts.description != null) item.set('description', opts.description);
+    if (opts.inputType != null) {
+      const input = ensureMapForNode(doc, item, 'input');
+      input.set('media_types', doc.createNode(splitMediaTypes(opts.inputType, '--input-type')));
+    }
+    if (opts.outputType != null) {
+      const output = ensureMapForNode(doc, item, 'output');
+      output.set('media_types', doc.createNode(splitMediaTypes(opts.outputType, '--output-type')));
+    }
+    if (opts.access != null) {
+      item.set('access', doc.createNode({ mode: opts.access, units }));
+      if (opts.access === 'credential') ensureCredentialProfile(doc);
+    }
+    return { capability: item.toJSON() };
+  });
+  ctx.printJson(commandResult(true, {
+    path: result.path,
+    capability: result.capability,
+  }), opts.pretty);
+}
+
 async function removeCapability(opts, ctx) {
   if (!opts.id) throw usageError('capability remove requires --id');
   const result = await updateManifestDocument(opts.repoPath || '.', async (doc) => {
@@ -149,8 +197,9 @@ export async function cmdCapability(positional, opts, ctx) {
   const action = positional[1];
   if (action === 'list') return listCapabilities(opts, ctx);
   if (action === 'add') return addCapability(opts, ctx);
+  if (action === 'update') return updateCapability(opts, ctx);
   if (action === 'remove') return removeCapability(opts, ctx);
-  throw usageError('capability requires add, remove, or list');
+  throw usageError('capability requires add, update, remove, or list');
 }
 
 async function listPayment(opts, ctx) {
@@ -235,6 +284,48 @@ export async function cmdPayment(positional, opts, ctx) {
   throw usageError('payment requires set-provider, remove-provider, or list');
 }
 
+async function showDeliveryConfig(opts, ctx) {
+  const { doc, path } = await readManifestDocument(opts.repoPath || '.');
+  const delivery = parseManifestDelivery(manifestFromDocument(doc));
+  ctx.printJson({
+    path,
+    delivery,
+  }, opts.pretty);
+}
+
+async function setDeliveryConfig(opts, ctx) {
+  const transports = splitCsv(opts.transports);
+  const presignedHosts = splitCsv(opts.presignedHosts);
+  const result = await updateManifestDocument(opts.repoPath || '.', async (doc) => {
+    const delivery = ensureNestedMap(doc, ['extensions', 'delivery']);
+    if (opts.scheme != null) delivery.set('scheme', opts.scheme);
+    if (opts.receivePublicKey != null) delivery.set('receive_public_key', opts.receivePublicKey);
+    if (transports != null) delivery.set('transports', doc.createNode(transports));
+    if (presignedHosts != null) delivery.set('presigned_hosts', doc.createNode(presignedHosts));
+    if (opts.githubInputPath != null || opts.githubOutputPath != null) {
+      const github = ensureNestedMap(doc, ['extensions', 'delivery', 'github']);
+      const templates = ensureNestedMap(doc, ['extensions', 'delivery', 'github', 'inbox_path_template']);
+      if (opts.githubInputPath != null) templates.set('input', opts.githubInputPath);
+      if (opts.githubOutputPath != null) templates.set('output', opts.githubOutputPath);
+      if (!github.get('inbox_path_template', true)) {
+        github.set('inbox_path_template', templates);
+      }
+    }
+    return { delivery: parseManifestDelivery(manifestFromDocument(doc)) };
+  });
+  ctx.printJson(commandResult(true, {
+    path: result.path,
+    delivery: result.delivery,
+  }), opts.pretty);
+}
+
+export async function cmdDelivery(positional, opts, ctx) {
+  const action = positional[1];
+  if (action === 'show-config') return showDeliveryConfig(opts, ctx);
+  if (action === 'set-config') return setDeliveryConfig(opts, ctx);
+  throw usageError('delivery requires set-config or show-config');
+}
+
 async function setNodeStatus(positional, opts, ctx) {
   const status = positional[2];
   if (!status) throw usageError('node set-status requires <status>');
@@ -251,8 +342,23 @@ async function setNodeStatus(positional, opts, ctx) {
   }), opts.pretty);
 }
 
+async function setNodeField(positional, opts, ctx, field, commandName) {
+  const value = positional[2];
+  if (!value) throw usageError(`node ${commandName} requires <value>`);
+  const result = await updateManifestDocument(opts.repoPath || '.', async (doc) => {
+    doc.set(field, value);
+    return { [field]: value };
+  });
+  ctx.printJson(commandResult(true, {
+    path: result.path,
+    [field]: result[field],
+  }), opts.pretty);
+}
+
 export async function cmdNode(positional, opts, ctx) {
   const action = positional[1];
   if (action === 'set-status') return setNodeStatus(positional, opts, ctx);
-  throw usageError('node requires set-status');
+  if (action === 'set-name') return setNodeField(positional, opts, ctx, 'name', 'set-name');
+  if (action === 'set-description') return setNodeField(positional, opts, ctx, 'description', 'set-description');
+  throw usageError('node requires set-status, set-name, or set-description');
 }

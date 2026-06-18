@@ -1,4 +1,4 @@
-import { chmod, readFile, writeFile, mkdir, rename } from 'node:fs/promises';
+import { chmod, readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import {
@@ -438,6 +438,94 @@ export async function cmdExtensionDeliveryFetchOutput(positional, opts, { loadMa
   }, opts.pretty);
 }
 
+async function readJsonFiles(dir) {
+  let entries = [];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+  const records = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const path = join(dir, entry.name);
+    try {
+      records.push({ path, value: JSON.parse(await readFile(path, 'utf8')) });
+    } catch (error) {
+      records.push({ path, error: error.message });
+    }
+  }
+  return records;
+}
+
+export async function cmdExtensionDeliveryStatus(opts, { printJson }) {
+  const repoPath = resolve(opts.repoPath || '.');
+  const outboxDir = resolve(opts.outboxDir || join(repoPath, '.creamlon', 'outbox'));
+  const deliveriesDir = join(repoPath, '.creamlon', 'deliveries');
+  const [outboxes, deliveries] = await Promise.all([
+    readJsonFiles(outboxDir),
+    readJsonFiles(deliveriesDir),
+  ]);
+  printJson({
+    ok: true,
+    outbox_dir: outboxDir,
+    deliveries_dir: deliveriesDir,
+    outbox_count: outboxes.length,
+    delivery_state_count: deliveries.length,
+    outboxes: outboxes.map((item) => ({
+      path: item.path,
+      request_id: item.value?.request_id || null,
+      transport: item.value?.transport || null,
+      error: item.error || null,
+    })),
+    deliveries: deliveries.map((item) => ({
+      path: item.path,
+      issue_number: item.value?.issue_number || null,
+      request_id: item.value?.request_id || null,
+      status: item.value?.status || null,
+      transport: item.value?.transport || null,
+      error: item.error || null,
+    })),
+  }, opts.pretty);
+}
+
+export async function cmdExtensionDeliveryCleanup(positional, opts, { resolveToken, printJson }) {
+  const slug = positional[3];
+  if (!slug) throw usageError('extension delivery cleanup requires <owner/repo>');
+  const token = resolveToken(opts);
+  const { owner, repo } = parseRepoSlug(slug);
+  const repoPath = resolve(opts.repoPath || '.');
+  const outboxDir = resolve(opts.outboxDir || join(repoPath, '.creamlon', 'outbox'));
+  const deliveriesDir = join(repoPath, '.creamlon', 'deliveries');
+  const [outboxes, deliveries] = await Promise.all([
+    readJsonFiles(outboxDir),
+    readJsonFiles(deliveriesDir),
+  ]);
+  const completedRequestIds = new Set();
+  const removed = [];
+  for (const item of deliveries) {
+    if (item.error || !item.value?.issue_number) continue;
+    if (item.value.status !== 'closed') continue;
+    if (item.value.proof?.request_id !== item.value.request_id) continue;
+    const issue = await getIssue(owner, repo, item.value.issue_number, token);
+    if (issue.state !== 'closed') continue;
+    completedRequestIds.add(item.value.request_id);
+    await rm(item.path, { force: true });
+    removed.push({ path: item.path, kind: 'delivery_state', request_id: item.value.request_id });
+  }
+  for (const item of outboxes) {
+    if (item.error || !completedRequestIds.has(item.value?.request_id)) continue;
+    await rm(item.path, { force: true });
+    removed.push({ path: item.path, kind: 'outbox', request_id: item.value.request_id });
+  }
+  printJson({
+    ok: true,
+    removed_count: removed.length,
+    removed,
+  }, opts.pretty);
+}
+
 export async function cmdExtension(positional, opts, ctx) {
   const topic = positional[1];
   const action = positional[2];
@@ -466,6 +554,12 @@ export async function cmdExtension(positional, opts, ctx) {
     case 'fetch-output':
       await cmdExtensionDeliveryFetchOutput(positional, opts, ctx);
       break;
+    case 'status':
+      await cmdExtensionDeliveryStatus(opts, ctx);
+      break;
+    case 'cleanup':
+      await cmdExtensionDeliveryCleanup(positional, opts, ctx);
+      break;
     default:
       throw usageError(`unknown extension delivery command: ${action || '<missing>'}`);
   }
@@ -481,6 +575,8 @@ Commands:
   fetch-input <owner/repo> <issue#>    Decrypt task input on the node
   send-output <owner/repo> <issue#>    Encrypt and upload task output
   fetch-output <owner/repo> <issue#>   Decrypt output and verify proof digest
+  status [options]                     Show local outbox and delivery state
+  cleanup <owner/repo> [options]       Remove local state for closed Issues
 
 prepare options:
   --transport <id>                     Default: github-private-repo
@@ -532,4 +628,9 @@ fetch-output options:
   --output-file <path>
   --proof-file <path>                  Optional; otherwise read from Issue
   --no-verify                          Skip Ed25519 proof verification (not recommended)
-  --token <pat>                        Caller token; or GITHUB_TOKEN / GH_TOKEN`;
+  --token <pat>                        Caller token; or GITHUB_TOKEN / GH_TOKEN
+
+status/cleanup options:
+  --repo-path <dir>
+  --outbox-dir <path>
+  --token <pat>                        Required by cleanup`;
