@@ -22,6 +22,7 @@ matches the documentation version you are reading.
 | Goal | Commands |
 | --- | --- |
 | Discover and inspect nodes | `discover`, `inspect` |
+| Manage local node manifest | `capability add`, `capability remove`, `capability list`, `payment set-provider`, `payment remove-provider`, `payment list`, `node set-status` |
 | Submit and verify tasks | `submit`, `fetch-proof` |
 | Operate task Issues | `watch`, `deliver`, `reject` |
 | Manage node identity | `keygen`, `key-rotate` |

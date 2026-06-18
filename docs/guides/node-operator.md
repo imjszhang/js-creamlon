@@ -32,6 +32,20 @@ The repository must:
 Keep capability IDs, media types, access requirements, extension declarations,
 and status accurate because callers consume the manifest directly.
 
+Use the local manifest commands for routine updates to an existing node:
+
+```bash
+creamlon capability add \
+  --repo-path ./my-node \
+  --id code_review \
+  --description "Review code" \
+  --input-type text/plain \
+  --output-type text/markdown \
+  --access credential
+
+creamlon node set-status busy --repo-path ./my-node
+```
+
 If the repository belongs to an organization, set the GitHub user that should
 receive caller inbox invitations:
 

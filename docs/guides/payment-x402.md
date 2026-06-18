@@ -30,6 +30,22 @@ examples are kept outside the npm package.
 Add payment discovery hints to `creamlon.yaml`. Core ignores this section; it
 is for humans and agents choosing how to obtain a credential.
 
+You can add the same hint with the CLI:
+
+```bash
+creamlon payment set-provider \
+  --repo-path ./my-node \
+  --capability-id code_review \
+  --provider-id x402 \
+  --resource-url https://pay.example/buy/code_review \
+  --network base \
+  --asset USDC \
+  --price "0.50" \
+  --pay-to "0x1111111111111111111111111111111111111111" \
+  --facilitator https://x402.facilitator.example \
+  --instructions "Pay with x402 to receive a one-time Creamlon credential."
+```
+
 ```yaml
 extensions:
   payment:
@@ -111,7 +127,7 @@ submit command:
 creamlon submit owner/code-review-node \
   --capability-id code_review \
   --media-type text/plain \
-  --input-file ./input.txt \
+  --input "review this patch" \
   --requester github:alice/caller \
   --credential "crv1_..." \
   --pretty

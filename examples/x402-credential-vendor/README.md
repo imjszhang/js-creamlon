@@ -112,7 +112,7 @@ value private and submit it through the normal Creamlon flow:
 creamlon submit owner/code-review-node \
   --capability-id code_review \
   --media-type text/plain \
-  --input-file ./input.txt \
+  --input "review this patch" \
   --requester github:alice/caller \
   --credential "crv1_..." \
   --pretty

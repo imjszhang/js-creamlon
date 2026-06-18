@@ -76,6 +76,8 @@ import {
   parseManifestDelivery,
   validateTaskDelivery,
 } from '../lib/extensions/delivery/schema.mjs';
+import { parseManifestPayment } from '../lib/extensions/payment/schema.mjs';
+import { cmdCapability, cmdNode, cmdPayment } from './manifest-edit.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -97,6 +99,9 @@ const VALUE_OPTIONS = new Set([
   '--task-file', '--manifest-file', '--receive-public-key', '--input-file', '--outbox', '--delivery-key',
   '--proof-file', '--no-verify',
   '--node', '--registry', '--operator', '--trust', '--permission',
+  '--id', '--description', '--access', '--units',
+  '--provider-id', '--resource-url', '--price', '--network', '--asset',
+  '--pay-to', '--facilitator', '--checkout-url', '--instructions',
 ]);
 
 const HELP = {
@@ -118,6 +123,9 @@ Commands:
   verify [options]                  Verify proof signature
   inspect <owner/repo>              Fetch and show creamlon.yaml
   discover <capability-id>          Find nodes via GitHub Topic search
+  capability <cmd>                  Manage local creamlon.yaml capabilities
+  payment <cmd>                     Manage local payment provider hints
+  node set-status <status>          Set local node availability status
   submit <owner/repo> [options]     Create task Issue (needs GITHUB_TOKEN)
   watch <owner/repo> [options]      List pending tasks (needs GITHUB_TOKEN)
   deliver <owner/repo> <issue#>     Sign and deliver proof (needs GITHUB_TOKEN)
@@ -193,7 +201,40 @@ Options:
   --pretty              Pretty-print JSON result`,
   inspect: `creamlon inspect <owner/repo> [--ref main]
 
-Fetch creamlon.yaml from GitHub and display capabilities.`,
+Fetch creamlon.yaml from GitHub and display capabilities, delivery, and payment hints.`,
+  capability: `creamlon capability <add|remove|list> [options]
+
+Commands:
+  add --id <id> --description <text> --input-type <type[,type]> --output-type <type[,type]>
+  remove --id <id>
+  list
+
+Options:
+  --access <free|credential>  Optional access mode
+  --units <n>                 Access units; must be 1 when access is set
+  --repo-path <dir>           Node repository (default: .)
+  --pretty                    Pretty-print JSON`,
+  payment: `creamlon payment <set-provider|remove-provider|list> [options]
+
+Commands:
+  set-provider --capability-id <id> --provider-id <id>
+  remove-provider --capability-id <id> --provider-id <id>
+  list
+
+Options:
+  --resource-url <url>    Provider resource URL, for example x402 endpoint
+  --price <amount>        Display price hint
+  --network <network>     Payment network hint
+  --asset <asset>         Payment asset hint
+  --pay-to <address>      Payment recipient hint
+  --facilitator <url>     x402 facilitator hint
+  --checkout-url <url>    Checkout URL hint
+  --instructions <text>   Top-level payment instructions
+  --repo-path <dir>       Node repository (default: .)
+  --pretty                Pretty-print JSON`,
+  node: `creamlon node set-status <available|busy|offline> [--repo-path <dir>] [--pretty]
+
+Set the local node availability status in creamlon.yaml.`,
   discover: `creamlon discover <capability-id> [options]
 
 Find nodes through the required GitHub Topic "creamlon-node".
@@ -364,6 +405,19 @@ function parseArgs(argv) {
     else if (arg === '--operator') { i += 1; opts.operator = argv[i]; }
     else if (arg === '--trust') { i += 1; opts.trust = argv[i]; }
     else if (arg === '--permission') { i += 1; opts.permission = argv[i]; }
+    else if (arg === '--id') { i += 1; opts.id = argv[i]; }
+    else if (arg === '--description') { i += 1; opts.description = argv[i]; }
+    else if (arg === '--access') { i += 1; opts.access = argv[i]; }
+    else if (arg === '--units') { i += 1; opts.units = argv[i]; }
+    else if (arg === '--provider-id') { i += 1; opts.providerId = argv[i]; }
+    else if (arg === '--resource-url') { i += 1; opts.resourceUrl = argv[i]; }
+    else if (arg === '--price') { i += 1; opts.price = argv[i]; }
+    else if (arg === '--network') { i += 1; opts.network = argv[i]; }
+    else if (arg === '--asset') { i += 1; opts.asset = argv[i]; }
+    else if (arg === '--pay-to') { i += 1; opts.payTo = argv[i]; }
+    else if (arg === '--facilitator') { i += 1; opts.facilitator = argv[i]; }
+    else if (arg === '--checkout-url') { i += 1; opts.checkoutUrl = argv[i]; }
+    else if (arg === '--instructions') { i += 1; opts.instructions = argv[i]; }
     else if (arg.startsWith('--')) throw usageError(`unknown option: ${arg}`);
     else positional.push(arg);
   }
@@ -554,6 +608,8 @@ async function cmdInspect(positional, opts) {
   if (out.valid) out.public_key_fingerprint = publicKeyFingerprint(parsed.identity.public_key);
   const delivery = parseManifestDelivery(parsed);
   if (delivery) out.delivery_extension = delivery;
+  const payment = parseManifestPayment(parsed);
+  if (payment) out.payment_extension = payment;
   printJson(out, opts.pretty);
 }
 
@@ -1432,6 +1488,15 @@ export async function runCli(argv) {
       break;
     case 'discover':
       await cmdDiscover(positional, opts);
+      break;
+    case 'capability':
+      await cmdCapability(positional, opts, { printJson });
+      break;
+    case 'payment':
+      await cmdPayment(positional, opts, { printJson });
+      break;
+    case 'node':
+      await cmdNode(positional, opts, { printJson });
       break;
     case 'submit':
       await cmdSubmit(positional, opts);
