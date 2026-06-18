@@ -2,7 +2,7 @@
 title: Writing documentation
 audience: contributors
 status: current
-verified: 0.7.0
+verified: 0.8.0
 ---
 
 # Writing documentation

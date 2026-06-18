@@ -2,7 +2,7 @@
 title: Core model
 audience: all users
 status: current
-verified: 0.7.0
+verified: 0.8.0
 ---
 
 # Core model

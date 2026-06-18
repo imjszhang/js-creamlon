@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0 - 2026-06-18
+
+### Added
+
+- Added local manifest management commands for capabilities, payment providers,
+  delivery configuration, node metadata, and validation.
+- Added caller task management commands for listing and cancelling task Issues.
+- Added credential, HMAC key, proof log, caller inbox, and private delivery
+  status and cleanup commands.
+- Added payment provider capability hints so providers can declare the
+  capability they fund.
+
 ## 0.7.0 - 2026-06-17
 
 ### Added
