@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.1 - 2026-06-19
+
+### Added
+
+- Added bundled node layout support with `.creamlon/manifest.yaml` and
+  `.creamlon/trust/` for repositories that keep Creamlon files grouped under
+  `.creamlon/`.
+- Added `init --layout bundled` to scaffold bundled nodes and add Creamlon to
+  existing repositories without overwriting unrelated files.
+- Added bundled onboarding README and template assets for external agents.
+
 ## 0.8.0 - 2026-06-18
 
 ### Added

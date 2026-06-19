@@ -54,7 +54,7 @@ backend is required.
 ## Try it
 
 ```bash
-npm install --global creamlon@0.8.0
+npm install --global creamlon@0.8.1
 creamlon discover code_review \
   --input-type text/uri-list \
   --output-type text/markdown \

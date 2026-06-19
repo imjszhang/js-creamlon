@@ -2,7 +2,7 @@
 title: GitHub workflow
 audience: maintainers
 status: current
-verified: 0.8.0
+verified: 0.8.1
 ---
 
 # GitHub workflow

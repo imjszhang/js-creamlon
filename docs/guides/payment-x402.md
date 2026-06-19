@@ -2,7 +2,7 @@
 title: x402 payment bridge
 audience: node operators
 status: experimental
-verified: 0.8.0
+verified: 0.8.1
 ---
 
 # x402 payment bridge
