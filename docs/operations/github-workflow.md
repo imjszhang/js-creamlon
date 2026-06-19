@@ -76,6 +76,11 @@ Recommended branch protection:
 - block force-pushes
 - block branch deletion
 
+After CI succeeds, `.github/workflows/auto-merge-owner.yml` automatically merges
+open pull requests authored by `imjszhang`. Other authors still require manual
+merge. Add the `no-automerge` label to opt out on a specific pull request. The
+workflow must be present on `main` before it can run.
+
 ## Release flow
 
 Prepare a release on a branch:
