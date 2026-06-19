@@ -1833,6 +1833,7 @@ async function findTemplateConflicts(src, dest, options = {}) {
       conflicts.push(...await findTemplateConflicts(srcPath, destPath, options));
     } else if (
       !(mergeGitignore && outputName === '.gitignore')
+      && !skipExisting.has(destPath)
       && !skipExisting.has(outputName)
       && await fileExists(destPath)
     ) {
@@ -1860,7 +1861,7 @@ async function copyTemplate(src, dest, name, options = {}) {
         continue;
       }
       if (noOverwrite && await fileExists(destPath)) {
-        if (skipExisting.has(outputName)) continue;
+        if (skipExisting.has(destPath) || skipExisting.has(outputName)) continue;
         fail(`template target already exists: ${destPath}`, 4);
       }
       await mkdir(dirname(destPath), { recursive: true });
@@ -1888,24 +1889,29 @@ async function cmdInit(positional, opts) {
     if (e.code !== 'ENOENT') throw e;
   }
   if (layout === 'bundled') {
+    const skipExisting = new Set([join(dest, 'README.md')]);
     const conflicts = await findTemplateConflicts(templateDir, dest, {
       mergeGitignore: true,
-      skipExisting: new Set(['README.md']),
+      skipExisting,
     });
     if (conflicts.length) fail(`template target already exists: ${conflicts[0]}`, 4);
   }
+  const skipExisting = layout === 'bundled' ? new Set([join(dest, 'README.md')]) : new Set();
   await copyTemplate(templateDir, dest, name, {
     noOverwrite: layout === 'bundled',
     mergeGitignore: layout === 'bundled',
-    skipExisting: new Set(['README.md']),
+    skipExisting,
   });
   console.log(`Created agent node at ${dest}`);
   console.log(`Next: creamlon keygen --out ${join(dest, '.creamlon')}`);
-  console.log(
-    layout === 'bundled'
-      ? 'Then paste public_key into .creamlon/manifest.yaml and push to GitHub.'
-      : 'Then paste public_key into creamlon.yaml and push to GitHub.',
-  );
+  if (layout === 'bundled') {
+    console.log('Then paste public_key into .creamlon/manifest.yaml.');
+    console.log('Commit .creamlon/manifest.yaml, .creamlon/README.md, and .creamlon/trust/.');
+    console.log('Before discovery, make the repository public, enable GitHub Issues, and add the Topic creamlon-node.');
+    console.log('If the root README already existed, link readers to .creamlon/README.md.');
+  } else {
+    console.log('Then paste public_key into creamlon.yaml and push to GitHub.');
+  }
 }
 
 async function readStdin() {

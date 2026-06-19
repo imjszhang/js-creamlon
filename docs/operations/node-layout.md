@@ -36,6 +36,7 @@ The `.creamlon/` directory is local private state and should be ignored.
 
 ```text
 .creamlon/
+  README.md
   manifest.yaml
   trust/
     proofs.log
@@ -50,9 +51,11 @@ The `.creamlon/` directory is local private state and should be ignored.
   cache/
 ```
 
-In the bundled layout, `.creamlon/manifest.yaml` and `.creamlon/trust/*` are
-public committed files. Private keys, credential stores, authorization key
-maps, delivery state, outboxes, and caches remain private and must be ignored
+In the bundled layout, `.creamlon/README.md`, `.creamlon/manifest.yaml`, and
+`.creamlon/trust/*` are public committed files. The README gives agents that do
+not have the Creamlon CLI a human-readable pointer to the manifest and GitHub
+Issue transport. Private keys, credential stores, authorization key maps,
+delivery state, outboxes, and caches remain private and must be ignored
 individually.
 
 Use this layout when the repository already has its own root-level structure
@@ -64,10 +67,10 @@ To add Creamlon to an existing repository, run from the repository root:
 creamlon init . --layout bundled
 ```
 
-The command keeps an existing `README.md`, merges missing Creamlon
+The command keeps an existing root `README.md`, merges missing Creamlon
 private-state patterns into an existing `.gitignore`, and refuses to overwrite
-existing Creamlon template targets such as `.creamlon/manifest.yaml` or
-`SKILL.md`.
+existing Creamlon template targets such as `.creamlon/README.md`,
+`.creamlon/manifest.yaml`, or `SKILL.md`.
 
 ## Discovery order
 
@@ -87,6 +90,8 @@ bundled layout incrementally.
 ## Operator checklist
 
 - Commit exactly one public manifest location.
+- Commit `.creamlon/README.md` when using the bundled layout so external agents
+  can find the manifest without the CLI.
 - Commit the matching public trust directory after delivery.
 - Do not ignore the whole `.creamlon/` directory when using the bundled layout.
 - Ignore private files inside `.creamlon/` by exact path or private subdirectory.

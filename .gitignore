@@ -1,5 +1,7 @@
 node_modules/
 .creamlon/
+!template/agent-node-bundled/.creamlon/
+!template/agent-node-bundled/.creamlon/README.md
 .env
 .env.*
 !.env.example

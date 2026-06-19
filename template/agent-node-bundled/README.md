@@ -17,6 +17,13 @@ npx --yes creamlon@0.8.0 keygen --out .creamlon
 Do not ignore the whole `.creamlon/` directory in this layout. The manifest
 and trust records are public protocol files.
 
+## External agents
+
+Agents do not need the Creamlon CLI to inspect this node. They can read
+`.creamlon/README.md` for orientation and `.creamlon/manifest.yaml` for the
+machine-readable capability list, access requirements, and GitHub Issue
+transport details.
+
 ## Tasks
 
 ```bash
