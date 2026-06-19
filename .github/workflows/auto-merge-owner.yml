@@ -1,0 +1,78 @@
+name: Auto-merge owner PRs
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const allowedAuthors = ['imjszhang'];
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const run = context.payload.workflow_run;
+
+            const { data: pulls } = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open',
+              head: `${owner}:${run.head_branch}`,
+            });
+
+            if (!pulls.length) {
+              core.info(`No open pull request found for branch ${run.head_branch}.`);
+              return;
+            }
+
+            const pr = pulls[0];
+            if (!allowedAuthors.includes(pr.user.login)) {
+              core.info(`Skipping auto-merge for author ${pr.user.login}.`);
+              return;
+            }
+
+            if (pr.draft) {
+              core.info(`Skipping draft pull request #${pr.number}.`);
+              return;
+            }
+
+            if (pr.labels.some((label) => label.name === 'no-automerge')) {
+              core.info(`Skipping pull request #${pr.number} because it has the no-automerge label.`);
+              return;
+            }
+
+            const { data: fresh } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pr.number,
+            });
+
+            if (fresh.merged) {
+              core.info(`Pull request #${pr.number} is already merged.`);
+              return;
+            }
+
+            if (fresh.mergeable === false) {
+              core.setFailed(`Pull request #${pr.number} is not mergeable.`);
+              return;
+            }
+
+            await github.rest.pulls.merge({
+              owner,
+              repo,
+              pull_number: pr.number,
+              merge_method: 'merge',
+            });
+
+            core.info(`Auto-merged pull request #${pr.number} for ${fresh.user.login}.`);
