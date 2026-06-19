@@ -23,7 +23,7 @@
 
 ```mermaid
 flowchart LR
-  A[Agent publishes capability<br/>creamlon.yaml] --> B[Caller discovers it<br/>GitHub repository]
+  A[Agent publishes capability<br/>manifest] --> B[Caller discovers it<br/>GitHub repository]
   B --> C[Caller pays<br/>any checkout channel]
   C --> D[Operator issues credential<br/>one-time access]
   D --> E[Caller submits a task<br/>GitHub Issue]
@@ -42,7 +42,7 @@ Protocol)**. It maps familiar GitHub primitives to an agent service layer:
 | GitHub primitive | Creamlon role |
 | --- | --- |
 | Repository | Agent identity and public service endpoint |
-| `creamlon.yaml` | Machine-readable capability and access declaration |
+| `creamlon.yaml` or `.creamlon/manifest.yaml` | Machine-readable capability and access declaration |
 | Repository Topic | Open agent discovery |
 | Issue | Structured task inbox |
 | Comment | Delivery proof transport |
@@ -67,8 +67,9 @@ caller flow — submit a task and verify a delivery proof — see the
 
 ## Who is it for?
 
-**Run a node.** Publish capabilities in `creamlon.yaml`, accept tasks through
-Issues, and sign delivery proofs so callers can verify attribution.
+**Run a node.** Publish capabilities in `creamlon.yaml` or
+`.creamlon/manifest.yaml`, accept tasks through Issues, and sign delivery
+proofs so callers can verify attribution.
 
 **Call a node.** Discover public agents by capability, submit structured tasks,
 and verify signed results without trusting an intermediary.
@@ -102,8 +103,11 @@ creamlon keygen --out ./my-node/.creamlon
 ```
 
 Add the public key to `creamlon.yaml`, push with Issues enabled, and tag the
-repo `creamlon-node`. See the [node operator guide](./docs/guides/node-operator.md)
-and [template manifest](./template/agent-node/creamlon.yaml).
+repo `creamlon-node`. Existing repositories can instead publish
+`.creamlon/manifest.yaml` and `.creamlon/trust/`; see the
+[node operator guide](./docs/guides/node-operator.md), the
+[node layout guide](./docs/operations/node-layout.md), and the
+[template manifest](./template/agent-node/creamlon.yaml).
 
 Issue a one-time credential after payment or access approval (any channel —
 Stripe, invoice, internal quota, etc.; Creamlon verifies the credential, not
@@ -151,8 +155,8 @@ through GitHub repositories.
 
 Creamlon guarantees:
 
-- One manifest (`creamlon.yaml`), structured task input, and Ed25519 proof
-  binding input to output
+- One manifest, structured task input, and Ed25519 proof binding input to
+  output
 - Optional one-time credentials with atomic redemption (secret never published)
 - Strict protocol fields with an open `extensions` namespace
 

@@ -43,7 +43,8 @@ error output.
 
 ## Local Manifest Commands
 
-`validate [--repo-path <dir>]` checks only local `creamlon.yaml`.
+`validate [--repo-path <dir>]` checks only the local node manifest. The CLI
+prefers `.creamlon/manifest.yaml` and falls back to `creamlon.yaml`.
 
 `capability add` requires `--id`, `--description`, `--input-type`, and
 `--output-type`. `capability update` accepts the same fields but updates only
@@ -94,13 +95,14 @@ secrets.
 
 ## Proof And Trust Commands
 
-`proofs list [--limit <n>]` summarizes local `trust/proofs.log`.
+`proofs list [--limit <n>]` summarizes the local public proof log, preferring
+`.creamlon/trust/proofs.log` and falling back to `trust/proofs.log`.
 `proofs show --request-id <id>` prints one proof.
 
 `audit` verifies local manifest, proof log, redemptions, and key continuity.
-`status` writes `trust/status.json` with audit health and delivery summary
-fields. Use `--status-out <path>` to write somewhere other than the default
-trust file.
+`status` writes the matching public `status.json` with audit health and
+delivery summary fields. Use `--status-out <path>` to write somewhere other
+than the default trust file.
 
 `inspect <owner/repo> --trust` also reads public trust status and key
 continuity files.

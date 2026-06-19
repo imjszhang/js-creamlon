@@ -130,8 +130,8 @@ npx --yes creamlon@0.8.0 init ./my-node --name my-node
 npx --yes creamlon@0.8.0 keygen --out ./my-node/.creamlon
 ```
 
-Put the generated public key in `creamlon.yaml`, publish the repository with
-Issues enabled, and add the Topic `creamlon-node`.
+Put the generated public key in `creamlon.yaml` or `.creamlon/manifest.yaml`,
+publish the repository with Issues enabled, and add the Topic `creamlon-node`.
 
 For a credential-protected capability, declare `access.mode: credential` and
 `profiles.credential.scheme: voucher-hmac-v1`, then create a one-time
@@ -186,8 +186,9 @@ Use `--resume` after interruption, then refresh public health:
 npx --yes creamlon@0.8.0 status --repo-path .
 ```
 
-Commit `trust/proofs.log`, `trust/redemptions.log` when present, and
-`trust/status.json`. Reject invalid tasks without signing a proof:
+Commit the public trust files for the selected layout: `trust/*` for root
+layout or `.creamlon/trust/*` for bundled layout. Reject invalid tasks without
+signing a proof:
 
 ```bash
 npx --yes creamlon@0.8.0 reject owner/repo <issue-number> \
@@ -203,6 +204,6 @@ recovery, auditing, and key rotation.
 
 - Authentication failure: set `GITHUB_TOKEN` or `GH_TOKEN`, or pass `--token`.
 - No discovery results: check repository visibility, Topic `creamlon-node`,
-  Issues availability, capability media types, and `creamlon.yaml`.
+  Issues availability, capability media types, and the public manifest.
 - Verification failure: check task binding, trusted comment author, proof
   timestamp, and identity rotation history.

@@ -18,7 +18,7 @@ creamlon keygen --out ./my-node/.creamlon
 ```
 
 Copy the generated public key into `creamlon.yaml`. Keep `.creamlon/` local and
-private.
+private when using the default root layout.
 
 ## 2. Publish the repository
 
@@ -26,11 +26,15 @@ The repository must:
 
 1. Be public, non-forked, and non-archived.
 2. Have GitHub Issues enabled.
-3. Publish a valid root-level `creamlon.yaml` on its default branch.
+3. Publish a valid manifest on its default branch.
 4. Use the GitHub Topic `creamlon-node`.
 
 Keep capability IDs, media types, access requirements, extension declarations,
 and status accurate because callers consume the manifest directly.
+
+The default root layout uses `creamlon.yaml` plus `trust/`. Existing
+repositories can instead use the bundled layout with `.creamlon/manifest.yaml`
+and `.creamlon/trust/`; see [node layout](../operations/node-layout.md).
 
 Use the local manifest commands for routine updates to an existing node:
 
@@ -135,9 +139,11 @@ After delivery, refresh status and commit public trust records:
 creamlon status --repo-path ./my-node
 ```
 
-Commit `trust/proofs.log`, `trust/status.json`, and
-`trust/redemptions.log` when credential redemptions occurred. Never commit
-credential stores or private keys.
+Commit the public trust files for the layout you use: `trust/proofs.log` and
+`trust/status.json` for the root layout, or `.creamlon/trust/proofs.log` and
+`.creamlon/trust/status.json` for the bundled layout. Also commit the matching
+`redemptions.log` when credential redemptions occurred. Never commit
+credential stores, authorization key maps, delivery outboxes, or private keys.
 
 ## Routine operations
 
