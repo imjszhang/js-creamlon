@@ -27,7 +27,7 @@ examples are kept outside the npm package.
 
 ## Advertise the provider
 
-Add payment discovery hints to `creamlon.yaml`. Core ignores this section; it
+Add payment discovery hints to the node manifest. Core ignores this section; it
 is for humans and agents choosing how to obtain a credential.
 
 You can add the same hint with the CLI:

@@ -17,7 +17,7 @@ read limits. Never print tokens, credential secrets, HMAC secrets, private
 keys, or private task content.
 
 Choose the caller workflow when delegating work. Choose the node workflow when
-creating or operating a repository that publishes `creamlon.yaml`.
+creating or operating a repository that publishes a Creamlon node manifest.
 
 ## Caller Workflow
 
