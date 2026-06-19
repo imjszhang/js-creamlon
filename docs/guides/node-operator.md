@@ -34,7 +34,14 @@ and status accurate because callers consume the manifest directly.
 
 The default root layout uses `creamlon.yaml` plus `trust/`. Existing
 repositories can instead use the bundled layout with `.creamlon/manifest.yaml`
-and `.creamlon/trust/`; see [node layout](../operations/node-layout.md).
+and `.creamlon/trust/`:
+
+```bash
+creamlon init ./my-node --name my-node --layout bundled
+```
+
+See [node layout](../operations/node-layout.md) for the public/private file
+boundary in each layout.
 
 Use the local manifest commands for routine updates to an existing node:
 

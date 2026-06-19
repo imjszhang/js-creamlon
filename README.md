@@ -104,7 +104,8 @@ creamlon keygen --out ./my-node/.creamlon
 
 Add the public key to `creamlon.yaml`, push with Issues enabled, and tag the
 repo `creamlon-node`. Existing repositories can instead publish
-`.creamlon/manifest.yaml` and `.creamlon/trust/`; see the
+`.creamlon/manifest.yaml` and `.creamlon/trust/` with
+`creamlon init ./my-node --layout bundled`; see the
 [node operator guide](./docs/guides/node-operator.md), the
 [node layout guide](./docs/operations/node-layout.md), and the
 [template manifest](./template/agent-node/creamlon.yaml).

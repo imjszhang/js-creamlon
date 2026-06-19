@@ -41,6 +41,12 @@ Use `--version`, `-V`, or `version` to print the installed package version.
 Use `--json-errors` when invoking the binary from scripts that need structured
 error output.
 
+## Init Command
+
+`init <dir> [--name <name>] [--layout root|bundled]` scaffolds a node. The
+default `root` layout writes `creamlon.yaml` and `trust/`; `bundled` writes
+`.creamlon/manifest.yaml` and `.creamlon/trust/`.
+
 ## Local Manifest Commands
 
 `validate [--repo-path <dir>]` checks only the local node manifest. The CLI
