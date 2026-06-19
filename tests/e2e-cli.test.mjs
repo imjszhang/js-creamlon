@@ -71,9 +71,24 @@ test('cli init keygen sign verify e2e', async () => {
 test('cli init supports bundled node layout', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-init-bundled-'));
   try {
-    await runCli(['init', dir, '--name', 'bundled-agent', '--layout', 'bundled']);
+    const init = runCreamlon(['init', dir, '--name', 'bundled-agent', '--layout', 'bundled']);
+    assert.equal(init.status, 0, init.stderr);
+    assert.match(init.stdout, /\.creamlon\/README\.md/);
+    assert.match(init.stdout, /GitHub Issues/);
+    assert.match(init.stdout, /creamlon-node/);
+
     const manifestText = await readFile(join(dir, '.creamlon', 'manifest.yaml'), 'utf8');
     assert.match(manifestText, /name: bundled-agent/);
+    assert.match(manifestText, /Creamlon v1 agent node/);
+
+    const nodeReadme = await readFile(join(dir, '.creamlon', 'README.md'), 'utf8');
+    assert.match(nodeReadme, /\.creamlon\/manifest\.yaml/);
+    assert.match(nodeReadme, /creamlon-node/);
+    assert.match(nodeReadme, /GitHub Issues/);
+    assert.match(nodeReadme, /capabilities\[\]/);
+    assert.match(nodeReadme, /\[task\] <capability_id>/);
+    assert.match(nodeReadme, /request_id/);
+
     await stat(join(dir, '.creamlon', 'trust', 'proofs.log'));
     await stat(join(dir, '.creamlon', 'trust', 'status.json')).catch((error) => {
       assert.equal(error.code, 'ENOENT');
@@ -112,6 +127,9 @@ test('cli init bundled layout can be added to an existing repository', async () 
     assert.match(manifestText, /name: existing-agent/);
     assert.equal(await readFile(join(dir, 'package.json'), 'utf8'), '{"private":true}\n');
     assert.equal(await readFile(join(dir, 'README.md'), 'utf8'), '# Existing project\n');
+    const nodeReadme = await readFile(join(dir, '.creamlon', 'README.md'), 'utf8');
+    assert.match(nodeReadme, /existing-agent Creamlon Node/);
+    assert.match(nodeReadme, /\.creamlon\/manifest\.yaml/);
 
     const gitignore = await readFile(join(dir, '.gitignore'), 'utf8');
     assert.match(gitignore, /^node_modules\/$/m);
@@ -146,6 +164,25 @@ test('cli init bundled layout rejects existing template targets before copying',
       (err) => err.code === 'ENOENT',
     );
     assert.equal(await readFile(join(dir, '.creamlon', 'manifest.yaml'), 'utf8'), 'existing\n');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('cli init bundled layout rejects existing node readme before copying', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-existing-readme-conflict-'));
+  try {
+    await mkdir(join(dir, '.creamlon'), { recursive: true });
+    await writeFile(join(dir, '.creamlon', 'README.md'), 'existing\n', 'utf8');
+    await assert.rejects(
+      () => runCli(['init', dir, '--layout', 'bundled']),
+      (err) => err.message.includes('template target already exists'),
+    );
+    await assert.rejects(
+      () => stat(join(dir, '.creamlon', 'manifest.yaml')),
+      (err) => err.code === 'ENOENT',
+    );
+    assert.equal(await readFile(join(dir, '.creamlon', 'README.md'), 'utf8'), 'existing\n');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

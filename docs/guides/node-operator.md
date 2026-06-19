@@ -34,7 +34,9 @@ and status accurate because callers consume the manifest directly.
 
 The default root layout uses `creamlon.yaml` plus `trust/`. Existing
 repositories can instead use the bundled layout with `.creamlon/manifest.yaml`
-and `.creamlon/trust/`:
+and `.creamlon/trust/`. Bundled nodes also publish `.creamlon/README.md` as a
+short entry point for external agents that can read GitHub files but have not
+installed the Creamlon CLI:
 
 ```bash
 cd ./existing-repo

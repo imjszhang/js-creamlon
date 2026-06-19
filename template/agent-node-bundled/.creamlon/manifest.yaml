@@ -1,6 +1,6 @@
 version: "1"
 name: {{name}}
-description: Agent capabilities exposed through the Creamlon GitHub profile.
+description: Creamlon v1 agent node. Read capabilities here and submit tasks through GitHub Issues.
 identity:
   type: ed25519
   public_key: "REPLACE_WITH_public.b64url"
