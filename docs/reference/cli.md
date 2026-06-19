@@ -45,7 +45,11 @@ error output.
 
 `init <dir> [--name <name>] [--layout root|bundled]` scaffolds a node. The
 default `root` layout writes `creamlon.yaml` and `trust/`; `bundled` writes
-`.creamlon/manifest.yaml` and `.creamlon/trust/`.
+`.creamlon/manifest.yaml` and `.creamlon/trust/`. Root layout requires an
+empty directory. Bundled layout can be added to an existing repository when
+Creamlon template target files do not already exist; it keeps an existing
+`README.md` and merges missing Creamlon private-state patterns into
+`.gitignore`.
 
 ## Local Manifest Commands
 
