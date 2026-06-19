@@ -9,8 +9,8 @@ creamlon init ./code-review-node --name code-review-node
 creamlon keygen --out ./code-review-node/.creamlon
 ```
 
-Bob places the generated public key in `creamlon.yaml`, pushes the repository
-publicly, and adds the Topic `creamlon-node`.
+Bob places the generated public key in the node manifest, pushes the
+repository publicly, and adds the Topic `creamlon-node`.
 
 To require a one-time credential for `code_review`, Bob adds:
 
@@ -77,8 +77,8 @@ creamlon deliver bob/code-review-node 42 \
 
 If interrupted, repeat `deliver` with `--resume`.
 
-After delivery, Bob commits both `trust/proofs.log` and, for credential-backed
-tasks, `trust/redemptions.log`.
+After delivery, Bob commits the public proof log and, for credential-backed
+tasks, the public redemptions log for the selected layout.
 
 ## Verify
 

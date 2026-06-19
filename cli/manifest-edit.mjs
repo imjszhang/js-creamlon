@@ -53,7 +53,7 @@ function capabilityId(item) {
 
 function findCapabilitySeq(doc) {
   const seq = getSeq(doc, 'capabilities');
-  if (!seq) fail('creamlon.yaml capabilities must be a sequence');
+  if (!seq) fail('node manifest capabilities must be a sequence');
   return seq;
 }
 
@@ -169,7 +169,7 @@ async function removeCapability(opts, ctx) {
     const index = capabilities.items.findIndex((item) => capabilityId(item) === opts.id);
     if (index < 0) fail(`unknown capability id: ${opts.id}`, 4);
     if (capabilities.items.length === 1) {
-      fail('cannot remove the last capability from creamlon.yaml', 4);
+      fail('cannot remove the last capability from the node manifest', 4);
     }
     capabilities.items.splice(index, 1);
 

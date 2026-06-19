@@ -65,7 +65,7 @@ async function verifyDeliveryProof({
     fail(`proof binding failed: ${binding.errors.join('; ')}`);
   }
   const currentPublicKey = parsed.identity?.public_key;
-  if (!currentPublicKey) fail('creamlon.yaml has no identity.public_key');
+  if (!currentPublicKey) fail('node manifest has no identity.public_key');
   const { owner, repo } = parseRepoSlug(slug);
   const { text: rotationsText } = await fetchRepositoryFilePreferred(
     { full_name: `${owner}/${repo}` },
@@ -102,7 +102,7 @@ export async function cmdExtensionDeliveryKeygen(opts) {
     out: outDir,
     public_key: keys.public_key,
     next_steps: [
-      `Add scheme: hpke-x25519-hkdf-sha256-aes256gcm-v2 and receive_public_key: ${keys.public_key} to creamlon.yaml extensions.delivery`,
+      `Add scheme: hpke-x25519-hkdf-sha256-aes256gcm-v2 and receive_public_key: ${keys.public_key} to node manifest extensions.delivery`,
       'For presigned transport, also add presigned_hosts with the exact storage hostnames',
       'Keep delivery.private.b64url local',
     ],
