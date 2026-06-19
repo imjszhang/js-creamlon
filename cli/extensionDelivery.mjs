@@ -33,6 +33,7 @@ import {
   writeOutbox,
 } from '../lib/extensions/delivery/outbox.mjs';
 import { writeDeliveryState } from '../lib/deliveryState.mjs';
+import { fetchRepositoryFilePreferred, publicTrustFiles } from '../lib/nodeLayout.mjs';
 
 function usageError(msg) {
   const err = new Error(msg);
@@ -66,12 +67,11 @@ async function verifyDeliveryProof({
   const currentPublicKey = parsed.identity?.public_key;
   if (!currentPublicKey) fail('creamlon.yaml has no identity.public_key');
   const { owner, repo } = parseRepoSlug(slug);
-  const rotationsText = await getRepositoryFile(
-    owner,
-    repo,
-    'trust/key-rotations.log',
+  const { text: rotationsText } = await fetchRepositoryFilePreferred(
+    { full_name: `${owner}/${repo}` },
+    (_repository, path, fileRef, optional) => getRepositoryFile(owner, repo, path, fileRef, token, { optional }),
+    publicTrustFiles('key-rotations.log'),
     ref || 'main',
-    token,
     { optional: true },
   );
   const continuity = inspectKeyContinuity(rotationsText, currentPublicKey);

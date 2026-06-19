@@ -78,6 +78,14 @@ import {
 } from '../lib/extensions/delivery/schema.mjs';
 import { parseManifestPayment } from '../lib/extensions/payment/schema.mjs';
 import { cmdCapability, cmdDelivery, cmdNode, cmdPayment } from './manifest-edit.mjs';
+import {
+  fetchRepositoryFilePreferred,
+  publicTrustFilePath,
+  publicTrustFiles,
+  publicTrustRelativePath,
+  readLocalManifestFile,
+  readPublicTrustFile,
+} from '../lib/nodeLayout.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -538,23 +546,34 @@ async function loadManifestContext(slug, ref) {
   return { owner, repo, parsed };
 }
 
+async function getPreferredRepositoryFile(owner, repo, paths, ref, token, options = {}) {
+  const result = await fetchRepositoryFilePreferred(
+    { full_name: `${owner}/${repo}` },
+    (_repository, path, fileRef, optional) => getRepositoryFile(owner, repo, path, fileRef, token, { optional }),
+    paths,
+    ref || 'main',
+    options,
+  );
+  return result.text;
+}
+
 async function loadAuthorizationSecrets(opts) {
   const repoPath = resolve(opts.repoPath || '.');
   const hmacKeys = await loadHmacKeys(opts.keys || join(repoPath, '.creamlon', 'authorization.keys.json'));
   return { hmacKeys };
 }
 
-function credentialPaths(opts) {
+async function credentialPaths(opts) {
   const repoPath = resolve(opts.repoPath || '.');
   return {
     repoPath,
     storePath: resolve(opts.credentials || join(repoPath, '.creamlon', 'credentials.json')),
-    redemptionsPath: join(repoPath, 'trust', 'redemptions.log'),
+    redemptionsPath: await publicTrustFilePath(repoPath, 'redemptions.log'),
   };
 }
 
 async function loadCredentialContext(opts) {
-  const paths = credentialPaths(opts);
+  const paths = await credentialPaths(opts);
   const [credentialStore, redemptions] = await Promise.all([
     loadCredentialStore(paths.storePath),
     loadRedemptions(paths.redemptionsPath),
@@ -633,10 +652,10 @@ async function cmdVerify(opts) {
     publicKeyB64 = parsed.identity?.public_key;
     if (!publicKeyB64) fail('creamlon.yaml has no identity.public_key');
     const token = resolveToken(opts);
-    const rotationsText = await getRepositoryFile(
+    const rotationsText = await getPreferredRepositoryFile(
       owner,
       repo,
-      'trust/key-rotations.log',
+      publicTrustFiles('key-rotations.log'),
       opts.ref || 'main',
       token,
       { optional: true },
@@ -688,8 +707,15 @@ async function cmdInspect(positional, opts) {
   if (payment) out.payment_extension = payment;
   if (opts.trustRecords) {
     const [statusText, rotationsText] = await Promise.all([
-      getRepositoryFile(owner, repo, 'trust/status.json', opts.ref || 'main', token, { optional: true }),
-      getRepositoryFile(owner, repo, 'trust/key-rotations.log', opts.ref || 'main', token, { optional: true }),
+      getPreferredRepositoryFile(owner, repo, publicTrustFiles('status.json'), opts.ref || 'main', token, { optional: true }),
+      getPreferredRepositoryFile(
+        owner,
+        repo,
+        publicTrustFiles('key-rotations.log'),
+        opts.ref || 'main',
+        token,
+        { optional: true },
+      ),
     ]);
     out.trust_status = statusText ? JSON.parse(statusText) : null;
     out.key_continuity = parsed.identity?.public_key
@@ -758,8 +784,11 @@ async function cmdValidate(opts) {
   const repoPath = resolve(opts.repoPath || '.');
   let manifest = null;
   let errors = [];
+  let path = null;
   try {
-    manifest = parseManifest(await readFile(join(repoPath, 'creamlon.yaml'), 'utf8'));
+    const file = await readLocalManifestFile(repoPath);
+    path = file.path;
+    manifest = parseManifest(file.text);
     errors = validateManifest(manifest, { requireGithubProfile: true });
     if (manifest?.identity?.public_key) {
       try {
@@ -773,7 +802,7 @@ async function cmdValidate(opts) {
   }
   const result = {
     ok: errors.length === 0,
-    path: join(repoPath, 'creamlon.yaml'),
+    path,
     manifest,
     errors,
   };
@@ -982,8 +1011,10 @@ async function cmdDeliver(positional, opts) {
   const token = resolveToken(opts);
   const repoPath = resolve(opts.repoPath || '.');
   const keyPath = opts.key || join(repoPath, '.creamlon', 'private.key');
-  const proofsPath = join(repoPath, 'trust', 'proofs.log');
-  const redemptionsPath = join(repoPath, 'trust', 'redemptions.log');
+  const proofsPath = await publicTrustFilePath(repoPath, 'proofs.log');
+  const redemptionsPath = await publicTrustFilePath(repoPath, 'redemptions.log');
+  const proofsRelPath = await publicTrustRelativePath(repoPath, 'proofs.log');
+  const redemptionsRelPath = await publicTrustRelativePath(repoPath, 'redemptions.log');
   const statePath = join(repoPath, '.creamlon', 'deliveries', `${issueNumber}.json`);
   const outputStatePath = join(
     repoPath,
@@ -1132,7 +1163,7 @@ async function cmdDeliver(positional, opts) {
       ...(task.credential ? { redemptions_log: redemptionsPath } : {}),
       proof,
       next_steps: [
-        `git -C ${repoPath} add trust/proofs.log${task.credential ? ' trust/redemptions.log' : ''}`,
+        `git -C ${repoPath} add ${proofsRelPath}${task.credential ? ` ${redemptionsRelPath}` : ''}`,
         `git -C ${repoPath} commit -m "creamlon: deliver ${task.request_id}"`,
         `git -C ${repoPath} push`,
       ],
@@ -1151,7 +1182,7 @@ async function cmdReject(positional, opts) {
 
   const token = resolveToken(opts);
   const repoPath = resolve(opts.repoPath || '.');
-  const proofsPath = join(repoPath, 'trust', 'proofs.log');
+  const proofsPath = await publicTrustFilePath(repoPath, 'proofs.log');
 
   const { owner, repo, parsed } = await loadManifestContext(slug, opts.ref);
   const authorizationSecrets = await loadAuthorizationSecrets(opts);
@@ -1230,10 +1261,10 @@ async function cmdFetchProof(positional, opts) {
   if (opts.verify) {
     const currentPublicKey = parsed.identity?.public_key;
     if (!currentPublicKey) fail('creamlon.yaml has no identity.public_key');
-    const rotationsText = await getRepositoryFile(
+    const rotationsText = await getPreferredRepositoryFile(
       owner,
       repo,
-      'trust/key-rotations.log',
+      publicTrustFiles('key-rotations.log'),
       opts.ref || 'main',
       token,
       { optional: true },
@@ -1348,11 +1379,7 @@ async function cmdCancel(positional, opts) {
 async function cmdProofs(positional, opts) {
   const action = positional[1];
   const repoPath = resolve(opts.repoPath || '.');
-  const proofsPath = join(repoPath, 'trust', 'proofs.log');
-  const logText = await readFile(proofsPath, 'utf8').catch((error) => {
-    if (error.code === 'ENOENT') return '';
-    throw error;
-  });
+  const { path: proofsPath, text: logText } = await readPublicTrustFile(repoPath, 'proofs.log', { optional: true });
   const proofs = parseProofsLog(logText);
   if (action === 'list') {
     const limit = opts.limit == null ? null : Number(opts.limit);
@@ -1383,24 +1410,15 @@ async function cmdProofs(positional, opts) {
 }
 
 async function auditRepository(repoPath) {
-  const manifest = parseManifest(await readFile(join(repoPath, 'creamlon.yaml'), 'utf8'));
+  const { text: manifestText } = await readLocalManifestFile(repoPath);
+  const manifest = parseManifest(manifestText);
   const manifestErrors = validateManifest(manifest, { requireGithubProfile: true });
-  const rotationsText = await readFile(join(repoPath, 'trust', 'key-rotations.log'), 'utf8').catch((error) => {
-    if (error.code === 'ENOENT') return '';
-    throw error;
-  });
+  const { text: rotationsText } = await readPublicTrustFile(repoPath, 'key-rotations.log', { optional: true });
   const continuity = manifestErrors.length === 0
     ? inspectKeyContinuity(rotationsText, manifest.identity.public_key)
     : { status: 'broken', errors: ['invalid creamlon.yaml'], history: [] };
-  const logText = await readFile(join(repoPath, 'trust', 'proofs.log'), 'utf8').catch((error) => {
-    if (error.code === 'ENOENT') return '';
-    throw error;
-  });
-  const redemptionsText = await readFile(join(repoPath, 'trust', 'redemptions.log'), 'utf8')
-    .catch((error) => {
-      if (error.code === 'ENOENT') return '';
-      throw error;
-    });
+  const { text: logText } = await readPublicTrustFile(repoPath, 'proofs.log', { optional: true });
+  const { text: redemptionsText } = await readPublicTrustFile(repoPath, 'redemptions.log', { optional: true });
   const redemptionEntries = [];
   const redemptionByCredential = new Map();
   const redemptionByRequest = new Map();
@@ -1513,7 +1531,8 @@ async function cmdAudit(opts) {
 
 async function cmdStatus(opts) {
   const repoPath = resolve(opts.repoPath || '.');
-  const manifest = parseManifest(await readFile(join(repoPath, 'creamlon.yaml'), 'utf8'));
+  const { text: manifestText } = await readLocalManifestFile(repoPath);
+  const manifest = parseManifest(manifestText);
   const result = await auditRepository(repoPath);
   const status = {
     version: manifest.version,
@@ -1524,7 +1543,7 @@ async function cmdStatus(opts) {
     proof_count: result.proof_count,
     last_delivery_at: result.last_delivery_at,
   };
-  const outPath = resolve(opts.statusOut || join(repoPath, 'trust', 'status.json'));
+  const outPath = resolve(opts.statusOut || await publicTrustFilePath(repoPath, 'status.json', { preferExisting: false }));
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, `${JSON.stringify(status, null, 2)}\n`, 'utf8');
   printJson({ ...status, path: outPath }, opts.pretty);
@@ -1546,13 +1565,14 @@ async function cmdKeyRotate(opts) {
   if (signingPublicKey !== opts.oldPublicKey) {
     fail('private key does not match --old-public-key');
   }
-  const manifest = parseManifest(await readFile(join(repoPath, 'creamlon.yaml'), 'utf8'));
+  const { text: manifestText } = await readLocalManifestFile(repoPath);
+  const manifest = parseManifest(manifestText);
   const manifestErrors = validateManifest(manifest, { requireGithubProfile: true });
   if (manifestErrors.length) fail(`invalid creamlon.yaml: ${manifestErrors.join('; ')}`);
   if (manifest.identity.public_key !== opts.newPublicKey) {
     fail('--new-public-key must match creamlon.yaml identity.public_key');
   }
-  const logPath = join(repoPath, 'trust', 'key-rotations.log');
+  const logPath = await publicTrustFilePath(repoPath, 'key-rotations.log');
   const existingText = await readFile(logPath, 'utf8').catch((error) => {
     if (error.code === 'ENOENT') return '';
     throw error;
@@ -1663,7 +1683,7 @@ async function cmdHmacKeyRotate(opts) {
 
 async function cmdCredential(positional, opts) {
   const action = positional[1];
-  const { storePath, redemptionsPath } = credentialPaths(opts);
+  const { storePath, redemptionsPath } = await credentialPaths(opts);
   const redemptions = await loadRedemptions(redemptionsPath);
 
   if (action === 'create') {
