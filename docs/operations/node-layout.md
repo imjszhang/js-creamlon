@@ -58,6 +58,17 @@ individually.
 Use this layout when the repository already has its own root-level structure
 and you want Creamlon protocol files grouped like `.github/`.
 
+To add Creamlon to an existing repository, run from the repository root:
+
+```bash
+creamlon init . --layout bundled
+```
+
+The command keeps an existing `README.md`, merges missing Creamlon
+private-state patterns into an existing `.gitignore`, and refuses to overwrite
+existing Creamlon template targets such as `.creamlon/manifest.yaml` or
+`SKILL.md`.
+
 ## Discovery order
 
 Remote discovery and local reads prefer the bundled layout first:
@@ -79,5 +90,7 @@ bundled layout incrementally.
 - Commit the matching public trust directory after delivery.
 - Do not ignore the whole `.creamlon/` directory when using the bundled layout.
 - Ignore private files inside `.creamlon/` by exact path or private subdirectory.
+- Use `creamlon init . --layout bundled` when adding Creamlon to an existing
+  repository.
 - Run `creamlon validate --repo-path .` and `creamlon audit --repo-path .`
   after changing layout files.

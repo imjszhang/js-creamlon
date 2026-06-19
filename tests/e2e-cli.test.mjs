@@ -98,6 +98,59 @@ test('cli init supports bundled node layout', async () => {
   }
 });
 
+test('cli init bundled layout can be added to an existing repository', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-existing-repo-'));
+  try {
+    await writeFile(join(dir, 'package.json'), '{"private":true}\n', 'utf8');
+    await writeFile(join(dir, 'README.md'), '# Existing project\n', 'utf8');
+    await writeFile(join(dir, '.gitignore'), 'node_modules/\n.creamlon/cache/\n', 'utf8');
+
+    await runCli(['init', dir, '--name', 'existing-agent', '--layout', 'bundled']);
+
+    const manifestPath = join(dir, '.creamlon', 'manifest.yaml');
+    const manifestText = await readFile(manifestPath, 'utf8');
+    assert.match(manifestText, /name: existing-agent/);
+    assert.equal(await readFile(join(dir, 'package.json'), 'utf8'), '{"private":true}\n');
+    assert.equal(await readFile(join(dir, 'README.md'), 'utf8'), '# Existing project\n');
+
+    const gitignore = await readFile(join(dir, '.gitignore'), 'utf8');
+    assert.match(gitignore, /^node_modules\/$/m);
+    assert.match(gitignore, /^\.creamlon\/private\.key$/m);
+    assert.match(gitignore, /^\.creamlon\/credentials\.json$/m);
+    assert.doesNotMatch(gitignore, /^\.creamlon\/$/m);
+
+    const { publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon'));
+    await writeFile(
+      manifestPath,
+      manifestText.replace('REPLACE_WITH_public.b64url', publicKeyBase64Url),
+      'utf8',
+    );
+    const result = runCreamlon(['validate', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('cli init bundled layout rejects existing template targets before copying', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-existing-conflict-'));
+  try {
+    await mkdir(join(dir, '.creamlon'), { recursive: true });
+    await writeFile(join(dir, '.creamlon', 'manifest.yaml'), 'existing\n', 'utf8');
+    await assert.rejects(
+      () => runCli(['init', dir, '--layout', 'bundled']),
+      (err) => err.message.includes('template target already exists'),
+    );
+    await assert.rejects(
+      () => stat(join(dir, 'README.md')),
+      (err) => err.code === 'ENOENT',
+    );
+    assert.equal(await readFile(join(dir, '.creamlon', 'manifest.yaml'), 'utf8'), 'existing\n');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('keygen repairs permissions when replacing an existing private key', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-key-mode-'));
   try {

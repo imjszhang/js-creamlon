@@ -393,7 +393,8 @@ Audit the node and write public status for discovery. The output path follows th
 
 Copy a node template to <dir> and replace {{name}} placeholders. The default
 root layout writes creamlon.yaml and trust/. The bundled layout writes
-.creamlon/manifest.yaml and .creamlon/trust/.`,
+.creamlon/manifest.yaml and .creamlon/trust/ and may be added to an existing
+repository when Creamlon template target files do not already exist.`,
   extensionDelivery: EXTENSION_DELIVERY_HELP,
 };
 
@@ -1790,7 +1791,59 @@ async function cmdCredential(positional, opts) {
   throw usageError('credential requires create, list, show, revoke, or gc');
 }
 
-async function copyTemplate(src, dest, name) {
+async function fileExists(path) {
+  try {
+    await stat(path);
+    return true;
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+async function writeMergedGitignore(path, content) {
+  let existing = '';
+  try {
+    existing = await readFile(path, 'utf8');
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  const existingLines = new Set(existing.split(/\r?\n/));
+  const additions = content
+    .split(/\r?\n/)
+    .filter((line) => line && !existingLines.has(line));
+  if (!existing && additions.length) {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, `${additions.join('\n')}\n`, 'utf8');
+  } else if (additions.length) {
+    const prefix = existing.endsWith('\n') ? '' : '\n';
+    await writeFile(path, `${existing}${prefix}${additions.join('\n')}\n`, 'utf8');
+  }
+}
+
+async function findTemplateConflicts(src, dest, options = {}) {
+  const { mergeGitignore = false, skipExisting = new Set() } = options;
+  const entries = await readdir(src, { withFileTypes: true });
+  const conflicts = [];
+  for (const entry of entries) {
+    const srcPath = join(src, entry.name);
+    const outputName = entry.name === 'SKILL.template.md' ? 'SKILL.md' : entry.name;
+    const destPath = join(dest, outputName);
+    if (entry.isDirectory()) {
+      conflicts.push(...await findTemplateConflicts(srcPath, destPath, options));
+    } else if (
+      !(mergeGitignore && outputName === '.gitignore')
+      && !skipExisting.has(outputName)
+      && await fileExists(destPath)
+    ) {
+      conflicts.push(destPath);
+    }
+  }
+  return conflicts;
+}
+
+async function copyTemplate(src, dest, name, options = {}) {
+  const { noOverwrite = false, mergeGitignore = false, skipExisting = new Set() } = options;
   await mkdir(dest, { recursive: true });
   const entries = await readdir(src, { withFileTypes: true });
   for (const entry of entries) {
@@ -1798,10 +1851,18 @@ async function copyTemplate(src, dest, name) {
     const outputName = entry.name === 'SKILL.template.md' ? 'SKILL.md' : entry.name;
     const destPath = join(dest, outputName);
     if (entry.isDirectory()) {
-      await copyTemplate(srcPath, destPath, name);
+      await copyTemplate(srcPath, destPath, name, options);
     } else {
       let content = await readFile(srcPath, 'utf8');
       content = content.replaceAll('{{name}}', name);
+      if (mergeGitignore && outputName === '.gitignore') {
+        await writeMergedGitignore(destPath, content);
+        continue;
+      }
+      if (noOverwrite && await fileExists(destPath)) {
+        if (skipExisting.has(outputName)) continue;
+        fail(`template target already exists: ${destPath}`, 4);
+      }
       await mkdir(dirname(destPath), { recursive: true });
       await writeFile(destPath, content, 'utf8');
     }
@@ -1822,11 +1883,22 @@ async function cmdInit(positional, opts) {
     const s = await stat(dest);
     if (s.isFile()) fail(`path is a file, not a directory: ${dest}`);
     const existing = await readdir(dest);
-    if (existing.length > 0) fail(`directory not empty: ${dest}`);
+    if (existing.length > 0 && layout === 'root') fail(`directory not empty: ${dest}`);
   } catch (e) {
     if (e.code !== 'ENOENT') throw e;
   }
-  await copyTemplate(templateDir, dest, name);
+  if (layout === 'bundled') {
+    const conflicts = await findTemplateConflicts(templateDir, dest, {
+      mergeGitignore: true,
+      skipExisting: new Set(['README.md']),
+    });
+    if (conflicts.length) fail(`template target already exists: ${conflicts[0]}`, 4);
+  }
+  await copyTemplate(templateDir, dest, name, {
+    noOverwrite: layout === 'bundled',
+    mergeGitignore: layout === 'bundled',
+    skipExisting: new Set(['README.md']),
+  });
   console.log(`Created agent node at ${dest}`);
   console.log(`Next: creamlon keygen --out ${join(dest, '.creamlon')}`);
   console.log(

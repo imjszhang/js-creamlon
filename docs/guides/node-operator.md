@@ -37,7 +37,8 @@ repositories can instead use the bundled layout with `.creamlon/manifest.yaml`
 and `.creamlon/trust/`:
 
 ```bash
-creamlon init ./my-node --name my-node --layout bundled
+cd ./existing-repo
+creamlon init . --name existing-repo --layout bundled
 ```
 
 See [node layout](../operations/node-layout.md) for the public/private file
