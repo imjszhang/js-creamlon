@@ -108,6 +108,56 @@ test('discoverRepositories validates, filters, and summarizes public trust files
   assert.equal(result.skipped_count, 1);
 });
 
+test('discoverRepositories prefers bundled Creamlon layout under .creamlon', async () => {
+  const oldKeys = await generateKeyPair(null);
+  const currentKeys = await generateKeyPair(null);
+  const proof = signProof(buildProofFields({
+    requestId: 'request-bundled',
+    capabilityId: 'echo',
+    inputDigest: hashText('hello'),
+    outputDigest: hashText('hello'),
+    completedAt: '2026-06-13T12:00:00.000Z',
+  }), currentKeys.privateKey);
+  const rotation = signKeyRotation({
+    oldPublicKey: oldKeys.publicKeyBase64Url,
+    newPublicKey: currentKeys.publicKeyBase64Url,
+    rotatedAt: '2026-06-12T00:00:00.000Z',
+  }, oldKeys.privateKey);
+  const requestedPaths = [];
+  const files = new Map([
+    ['owner/bundled:.creamlon/manifest.yaml', manifestYaml(currentKeys.publicKeyBase64Url)],
+    ['owner/bundled:.creamlon/trust/proofs.log', `${JSON.stringify(proof)}\n`],
+    ['owner/bundled:.creamlon/trust/key-rotations.log', `${JSON.stringify(rotation)}\n`],
+    ['owner/bundled:.creamlon/trust/status.json', JSON.stringify({
+      version: '1',
+      status: 'available',
+      checked_at: '2026-06-14T00:00:00.000Z',
+      proofs_valid: true,
+    })],
+  ]);
+
+  const result = await discoverRepositories([repository('bundled')], {
+    capabilityId: 'echo',
+    inputType: 'text/plain',
+    outputType: 'text/plain',
+    now: new Date('2026-06-14T01:00:00.000Z'),
+    fetchFile: async (repo, path, _ref, optional) => {
+      requestedPaths.push(path);
+      const value = files.get(`${repo.full_name}:${path}`);
+      if (value == null && optional) return null;
+      if (value == null) throw new Error('missing file');
+      return value;
+    },
+  });
+
+  assert.equal(result.result_count, 1);
+  assert.equal(result.results[0].repo, 'owner/bundled');
+  assert.equal(result.results[0].signature_log_status, 'valid');
+  assert.equal(result.results[0].health.status, 'fresh');
+  assert.ok(requestedPaths.includes('.creamlon/manifest.yaml'));
+  assert.ok(!requestedPaths.includes('creamlon.yaml'));
+});
+
 test('discovery verifies historical proofs with the key active at completion time', async () => {
   const oldKeys = await generateKeyPair(null);
   const currentKeys = await generateKeyPair(null);

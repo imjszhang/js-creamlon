@@ -1,6 +1,6 @@
 ﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -152,6 +152,62 @@ test('validate checks only the local manifest', async () => {
     const result = runCreamlon(['validate', '--repo-path', dir, '--pretty']);
     assert.equal(result.status, 0, result.stderr);
     assert.equal(JSON.parse(result.stdout).ok, true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('validate audit status and proofs support bundled Creamlon layout', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-bundled-layout-'));
+  try {
+    await mkdir(join(dir, '.creamlon', 'trust'), { recursive: true });
+    const { privateKey, publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon'));
+    const manifest = `version: "1"
+name: bundled-agent
+description: Bundled Creamlon node
+identity:
+  type: ed25519
+  public_key: ${publicKeyBase64Url}
+status: available
+capabilities:
+  - id: echo
+    description: Echo
+    input:
+      media_types: [text/plain]
+    output:
+      media_types: [text/plain]
+profiles:
+  github:
+    transport: issues
+extensions: {}
+`;
+    await writeFile(join(dir, '.creamlon', 'manifest.yaml'), manifest, 'utf8');
+    const proof = signProof(buildProofFields({
+      requestId: 'req-bundled',
+      capabilityId: 'echo',
+      inputDigest: hashText('in'),
+      outputDigest: hashText('out'),
+      completedAt: '2026-06-13T00:00:00.000Z',
+    }), privateKey);
+    await writeFile(join(dir, '.creamlon', 'trust', 'proofs.log'), `${JSON.stringify(proof)}\n`, 'utf8');
+
+    let result = runCreamlon(['validate', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).path, join(dir, '.creamlon', 'manifest.yaml'));
+
+    result = runCreamlon(['audit', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).proof_count, 1);
+
+    result = runCreamlon(['status', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).path, join(dir, '.creamlon', 'trust', 'status.json'));
+    const status = JSON.parse(await readFile(join(dir, '.creamlon', 'trust', 'status.json'), 'utf8'));
+    assert.equal(status.proof_count, 1);
+
+    result = runCreamlon(['proofs', 'list', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).proofs[0].request_id, 'req-bundled');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
