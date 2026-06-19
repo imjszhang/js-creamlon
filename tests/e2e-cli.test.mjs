@@ -68,6 +68,36 @@ test('cli init keygen sign verify e2e', async () => {
   }
 });
 
+test('cli init supports bundled node layout', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-init-bundled-'));
+  try {
+    await runCli(['init', dir, '--name', 'bundled-agent', '--layout', 'bundled']);
+    const manifestText = await readFile(join(dir, '.creamlon', 'manifest.yaml'), 'utf8');
+    assert.match(manifestText, /name: bundled-agent/);
+    await stat(join(dir, '.creamlon', 'trust', 'proofs.log'));
+    await stat(join(dir, '.creamlon', 'trust', 'status.json')).catch((error) => {
+      assert.equal(error.code, 'ENOENT');
+    });
+
+    const gitignore = await readFile(join(dir, '.gitignore'), 'utf8');
+    assert.doesNotMatch(gitignore, /^\.creamlon\/$/m);
+    assert.match(gitignore, /^\.creamlon\/private\.key$/m);
+    assert.match(gitignore, /^\.creamlon\/credentials\.json$/m);
+
+    const { publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon'));
+    await writeFile(
+      join(dir, '.creamlon', 'manifest.yaml'),
+      manifestText.replace('REPLACE_WITH_public.b64url', publicKeyBase64Url),
+      'utf8',
+    );
+    const result = runCreamlon(['validate', '--repo-path', dir, '--pretty']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).path, join(dir, '.creamlon', 'manifest.yaml'));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('keygen repairs permissions when replacing an existing private key', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-key-mode-'));
   try {

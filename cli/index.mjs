@@ -90,6 +90,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const TEMPLATE_DIR = join(ROOT, 'template', 'agent-node');
+const BUNDLED_TEMPLATE_DIR = join(ROOT, 'template', 'agent-node-bundled');
 const PACKAGE_VERSION = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8')).version;
 const VALUE_OPTIONS = new Set([
   '--out', '--file', '--request-id', '--capability-id', '--input-digest', '--output-digest',
@@ -111,6 +112,7 @@ const VALUE_OPTIONS = new Set([
   '--provider-id', '--resource-url', '--price', '--network', '--asset',
   '--pay-to', '--facilitator', '--checkout-url', '--instructions',
   '--scheme', '--transports', '--presigned-hosts',
+  '--layout',
 ]);
 
 const HELP = {
@@ -387,9 +389,11 @@ Validate local creamlon.yaml and every proof in trust/proofs.log.`,
   status: `creamlon status [--repo-path <dir>] [--status-out <path>] [--pretty]
 
 Audit the node and write trust/status.json for discovery. The output path defaults to <repo-path>/trust/status.json.`,
-  init: `creamlon init <dir> [--name <name>]
+  init: `creamlon init <dir> [--name <name>] [--layout root|bundled]
 
-Copy template/agent-node/ to <dir> and replace {{name}} placeholders.`,
+Copy a node template to <dir> and replace {{name}} placeholders. The default
+root layout writes creamlon.yaml and trust/. The bundled layout writes
+.creamlon/manifest.yaml and .creamlon/trust/.`,
   extensionDelivery: EXTENSION_DELIVERY_HELP,
 };
 
@@ -501,6 +505,7 @@ function parseArgs(argv) {
     else if (arg === '--scheme') { i += 1; opts.scheme = argv[i]; }
     else if (arg === '--transports') { i += 1; opts.transports = argv[i]; }
     else if (arg === '--presigned-hosts') { i += 1; opts.presignedHosts = argv[i]; }
+    else if (arg === '--layout') { i += 1; opts.layout = argv[i]; }
     else if (arg.startsWith('--')) throw usageError(`unknown option: ${arg}`);
     else positional.push(arg);
   }
@@ -1807,6 +1812,11 @@ async function cmdInit(positional, opts) {
   const dir = positional[1];
   if (!dir) throw usageError('init requires <dir>');
   const name = opts.name || 'my-agent';
+  const layout = opts.layout || 'root';
+  if (!['root', 'bundled'].includes(layout)) {
+    throw usageError('init --layout must be root or bundled');
+  }
+  const templateDir = layout === 'bundled' ? BUNDLED_TEMPLATE_DIR : TEMPLATE_DIR;
   const dest = resolve(dir);
   try {
     const s = await stat(dest);
@@ -1816,10 +1826,14 @@ async function cmdInit(positional, opts) {
   } catch (e) {
     if (e.code !== 'ENOENT') throw e;
   }
-  await copyTemplate(TEMPLATE_DIR, dest, name);
+  await copyTemplate(templateDir, dest, name);
   console.log(`Created agent node at ${dest}`);
   console.log(`Next: creamlon keygen --out ${join(dest, '.creamlon')}`);
-  console.log('Then paste public_key into creamlon.yaml and push to GitHub.');
+  console.log(
+    layout === 'bundled'
+      ? 'Then paste public_key into .creamlon/manifest.yaml and push to GitHub.'
+      : 'Then paste public_key into creamlon.yaml and push to GitHub.',
+  );
 }
 
 async function readStdin() {
