@@ -22,15 +22,15 @@ old nodes, callers, and verifiers can keep interoperating.
 
 The following version 1 structures are public compatibility boundaries:
 
-- `creamlon.yaml` core manifest fields and profile fields
+- Manifest core fields and profile fields in `creamlon.yaml` or
+  `.creamlon/manifest.yaml`
 - GitHub Issue task core fields
 - Ed25519 proof fields
 - proof canonical JSON field order
 - HMAC authorization canonical JSON field order
 - credential intent canonical JSON field order
 - delivery intent canonical JSON field order for published delivery schemes
-- `trust/proofs.log`, `trust/redemptions.log`, `trust/key-rotations.log`, and
-  `trust/status.json`
+- Public trust logs and status in `trust/` or `.creamlon/trust/`
 
 Unknown version 1 core fields are rejected. Do not add fields to these
 structures for ordinary feature work.

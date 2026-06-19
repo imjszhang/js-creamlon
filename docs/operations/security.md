@@ -11,9 +11,18 @@ Creamlon uses public GitHub repositories and Issues. Treat repository names,
 Issue metadata, timestamps, actors, capability IDs, URLs, inline inputs, and
 comments as public information.
 
+## Layout boundary
+
+Root-layout nodes keep public protocol files in `creamlon.yaml` and `trust/`,
+and private local state in `.creamlon/`.
+
+Bundled-layout nodes keep public protocol files in `.creamlon/manifest.yaml`
+and `.creamlon/trust/`. In that layout, do not ignore or publish the whole
+`.creamlon/` directory blindly; commit only the public manifest and trust
+records, and ignore private state by exact path.
+
 ## Never publish
 
-- `.creamlon/`
 - Ed25519 private keys
 - complete `crv1_...` credentials
 - `.creamlon/credentials.json`

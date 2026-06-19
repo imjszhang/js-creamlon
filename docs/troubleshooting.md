@@ -25,9 +25,9 @@ operation. Do not print the token while diagnosing the problem.
 ## Discovery returns no nodes
 
 Check that the node repository is public, non-forked, non-archived, has Issues
-enabled, uses the `creamlon-node` Topic, and publishes a valid root-level
-`creamlon.yaml`. Confirm capability ID, status, and media-type filters. Use
-`--refresh` to bypass the local discovery cache.
+enabled, uses the `creamlon-node` Topic, and publishes a valid manifest at
+`creamlon.yaml` or `.creamlon/manifest.yaml`. Confirm capability ID, status,
+and media-type filters. Use `--refresh` to bypass the local discovery cache.
 
 ## Submission is rejected
 

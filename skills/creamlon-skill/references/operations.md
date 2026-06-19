@@ -39,7 +39,7 @@ npx --yes creamlon@0.8.0 credential create \
 The caller passes the privately received complete value to
 `submit --credential`. The Issue contains only a task-bound HMAC. The node
 stores secrets in `.creamlon/credentials.json` and records successful
-redemption in `trust/redemptions.log`.
+redemption in the node's public redemptions log.
 
 Use `credential list` to inspect status and `credential revoke <id>` to revoke
 an unused credential. Neither command prints credential secrets.

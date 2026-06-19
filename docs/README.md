@@ -38,6 +38,8 @@ GitHub. Start with the path that matches what you need to do.
 
 - [Security](./operations/security.md): secrets, public metadata, and incident
   response.
+- [Node layout](./operations/node-layout.md): root and bundled repository
+  layouts for public node files and private local state.
 - [GitHub workflow](./operations/github-workflow.md): branch, pull request,
   CI, merge, and release checks.
 - [Protocol compatibility](./operations/protocol-compatibility.md): stable

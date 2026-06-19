@@ -11,9 +11,10 @@ Creamlon separates public discovery, task access, and delivery verification.
 
 ## Node and manifest
 
-A node is represented by a public GitHub repository. Its root-level
-`creamlon.yaml` declares identity, status, capabilities, media types, access
-requirements, profiles, and extensions.
+A node is represented by a public GitHub repository. Its manifest declares
+identity, status, capabilities, media types, access requirements, profiles,
+and extensions. The manifest can be published as root-level `creamlon.yaml` or
+as bundled `.creamlon/manifest.yaml`.
 
 The manifest is a machine-readable contract. Callers should inspect it for each
 task instead of assuming a previous capability definition is still current.
@@ -50,8 +51,9 @@ does not prove output quality, legal compliance, payment, or confidentiality.
 ## Trust records
 
 Nodes can publish proof, redemption, key-rotation, and status records under
-`trust/`. These records are auditable but self-published. Callers must anchor
-identity trust independently and evaluate node quality separately.
+`trust/` or bundled `.creamlon/trust/`. These records are auditable but
+self-published. Callers must anchor identity trust independently and evaluate
+node quality separately.
 
 ## Core and extensions
 

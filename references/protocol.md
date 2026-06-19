@@ -7,7 +7,8 @@ GitHub is the official version 1 profile.
 
 ## Manifest
 
-A node publishes one root-level, machine-readable `creamlon.yaml`.
+A node publishes one machine-readable manifest, either as root-level
+`creamlon.yaml` or bundled `.creamlon/manifest.yaml`.
 
 ```yaml
 version: "1"
@@ -58,13 +59,15 @@ A discoverable node:
 
 1. Is a public, non-fork, non-archived repository with Issues enabled.
 2. Adds the GitHub Topic `creamlon-node`.
-3. Publishes a valid `creamlon.yaml` on its default branch.
+3. Publishes a valid manifest on its default branch.
 
 Discovery may read these optional public trust files:
 
 - `trust/proofs.log`
 - `trust/key-rotations.log`
 - `trust/status.json`
+
+Bundled-layout nodes publish the same files under `.creamlon/trust/`.
 
 They provide self-published evidence. Proof counts never affect ranking, and a
 rotation chain is trusted only when anchored to a caller's previously saved key.
@@ -186,7 +189,7 @@ Before delivery, a GitHub node verifies:
 1. Manifest and task schemas.
 2. Issue title, open state, capability, and task expiry.
 3. Authorization when the node declares that profile.
-4. Absence of the request ID in `trust/proofs.log`.
+4. Absence of the request ID in the node's public proof log.
 5. Credential authorization and unused status when the capability requires it.
 
 ## Proof
@@ -223,8 +226,8 @@ prepared -> commented -> logged -> closed
 ```
 
 For credential-backed tasks, redemption is first appended to
-`trust/redemptions.log`. The proof is posted to the Issue, appended to
-`trust/proofs.log`, and the Issue is closed. `creamlon deliver --resume`
+the node's public redemptions log. The proof is posted to the Issue, appended
+to the public proofs log, and the Issue is closed. `creamlon deliver --resume`
 continues interrupted delivery without redeeming the credential twice.
 
 YAML inputs use the core schema. Duplicate keys, aliases, unknown core fields,
