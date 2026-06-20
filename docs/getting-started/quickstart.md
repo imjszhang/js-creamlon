@@ -7,14 +7,16 @@ verified: 0.8.1
 
 # Quickstart
 
-This guide installs Creamlon, checks the CLI, and shows the shortest public
-caller workflow.
+This guide installs Creamlon and opens a minimal GitHub-backed agent service
+store. You will create a node repository, advertise one service, and see how a
+customer would place and verify an order.
 
 ## Prerequisites
 
 - Node.js 18 or newer
-- A GitHub token for task submission
-- A public Creamlon node to call
+- A GitHub account
+- A public GitHub repository with Issues enabled, or permission to create one
+- A GitHub token for write operations
 
 Public discovery and proof reads can run without a token at lower GitHub rate
 limits. Set `GITHUB_TOKEN`, `GH_TOKEN`, or pass `--token` for writes.
@@ -28,53 +30,113 @@ creamlon help
 
 The first line of the help output should report CLI version `0.8.1`.
 
-## Discover a capability
+## Open a minimal service store
 
-Replace `echo` and the media types with the capability you need:
+Create a local node directory and generate its signing identity:
 
 ```bash
-creamlon discover echo \
-  --input-type text/plain \
-  --output-type text/plain \
+creamlon init ./my-agent-store --name my-agent-store
+creamlon keygen --out ./my-agent-store/.creamlon
+```
+
+Copy the generated public key into `./my-agent-store/creamlon.yaml` when the
+CLI asks you to do so. Keep `.creamlon/` private; it contains local operator
+state.
+
+## Add your first service
+
+```bash
+creamlon capability add \
+  --repo-path ./my-agent-store \
+  --id code_review \
+  --description "Review a pull request and return Markdown feedback" \
+  --input-type text/uri-list \
+  --output-type text/markdown \
+  --access free
+```
+
+This writes a machine-readable service catalog entry. Free access is the
+shortest first run; you can add one-time credentials or a payment bridge later.
+
+## Publish the store on GitHub
+
+Create a public GitHub repository for `my-agent-store`, enable Issues, push the
+files, and add the Topic `creamlon-node`.
+
+The repository must publish `creamlon.yaml` on its default branch. Do not commit
+the private `.creamlon/` state from your workstation.
+
+## Discover the service
+
+From any machine with the CLI installed:
+
+```bash
+creamlon discover code_review \
+  --input-type text/uri-list \
+  --output-type text/markdown \
   --pretty
+
+creamlon inspect owner/my-agent-store --pretty
 ```
 
-A usable result identifies a repository, capability, status, accepted media
-types, and node identity.
+A usable result identifies the repository, service, status, accepted media
+types, access mode, and node identity.
 
-## Inspect before submitting
-
-```bash
-creamlon inspect owner/repo --pretty
-```
-
-Confirm that the capability is available and accepts the intended input. If it
-declares credential access, obtain the complete `crv1_...` credential through
-the operator's private channel before continuing.
-
-## Submit a task
+## Place an order
 
 ```bash
 export GITHUB_TOKEN="<github-token>"
 
-creamlon submit owner/repo \
-  --capability-id echo \
-  --media-type text/plain \
-  --input "hello" \
+creamlon submit owner/my-agent-store \
+  --capability-id code_review \
+  --media-type text/uri-list \
+  --input-url "https://github.com/alice/project/pull/42" \
   --requester github:your-user/your-repo \
   --pretty
 ```
 
 The result contains the created GitHub Issue number. Task input placed in
-`--input` or `--input-url` is public. Use a digest and an appropriate delivery
-extension when the content must remain private.
+`--input` or `--input-url` is public. Use `--input-digest` with an appropriate
+delivery extension when the content must remain private.
+
+## Process the order
+
+On the operator machine:
+
+```bash
+creamlon watch owner/my-agent-store \
+  --repo-path ./my-agent-store \
+  --once \
+  --pretty
+```
+
+Execute only tasks reported as valid. For this quickstart, write a small
+Markdown result file:
+
+```bash
+printf "Looks good. Consider adding tests for edge cases.\n" > review.md
+
+creamlon deliver owner/my-agent-store <issue-number> \
+  --repo-path ./my-agent-store \
+  --output-file ./review.md \
+  --pretty
+```
+
+Refresh and commit public trust records:
+
+```bash
+creamlon status --repo-path ./my-agent-store
+```
+
+Commit the updated `trust/` files. Never commit private keys, credentials,
+delivery outboxes, or local caches.
 
 ## Verify delivery
 
-After the node closes the Issue:
+From the customer side:
 
 ```bash
-creamlon fetch-proof owner/repo <issue-number> --verify --pretty
+creamlon fetch-proof owner/my-agent-store <issue-number> --verify --pretty
 ```
 
 Accept the protocol result only when verification succeeds. A valid proof
@@ -83,8 +145,10 @@ the usefulness or correctness of the output.
 
 ## Next steps
 
-- Follow the complete [caller guide](../guides/caller.md).
-- To publish a capability, follow the
-  [node operator guide](../guides/node-operator.md).
-- Read [security guidance](../operations/security.md) before using credentials
-  or private delivery.
+- Add paid or controlled access with
+  [one-time credentials](../guides/node-operator.md#3-set-pricing-and-access).
+- Add x402 as one possible payment channel with the
+  [x402 payment bridge](../guides/payment-x402.md).
+- Add private artifact transport with
+  [`delivery-hpke-v2`](../../extensions/delivery-hpke-v2.md).
+- Read the full [store operator guide](../guides/node-operator.md).

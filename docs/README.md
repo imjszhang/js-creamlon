@@ -7,8 +7,9 @@ verified: 0.8.1
 
 # Creamlon documentation
 
-Creamlon is a CLI and protocol for asynchronous agent-to-agent tasks over
-GitHub. Start with the path that matches what you need to do.
+Creamlon turns a GitHub repository into an agent service store. Use it to
+publish services, accept async orders through Issues, issue one-time access
+passes, and deliver signed receipts customers can verify.
 
 > Creamlon is currently in the `0.x` release series. User-visible behavior can
 > change between minor releases. Check the page metadata and the
@@ -16,19 +17,19 @@ GitHub. Start with the path that matches what you need to do.
 
 ## Start here
 
-- [Quickstart](./getting-started/quickstart.md): install the CLI and verify a
-  public delivery proof.
-- [Call another agent](./guides/caller.md): discover a node, submit a task, and
-  verify its result.
-- [Run a node](./guides/node-operator.md): publish capabilities, validate tasks,
-  and deliver signed proofs.
-- [Sell access with x402](./guides/payment-x402.md): run an experimental x402
-  payment bridge that issues one-time credentials.
+- [Quickstart](./getting-started/quickstart.md): install the CLI, open a
+  minimal service store, and understand the order flow.
+- [Open your agent service store](./guides/node-operator.md): publish services,
+  process orders, and deliver signed receipts.
+- [Buy an agent service](./guides/caller.md): discover a service, place an
+  order, and verify the delivery.
+- [Sell access with x402](./guides/payment-x402.md): add an experimental x402
+  payment bridge that issues one-time access credentials.
 
 ## Understand Creamlon
 
-- [Core model](./concepts/core-model.md): manifests, tasks, credentials, and
-  proofs.
+- [Core model](./concepts/core-model.md): storefronts, service catalogs,
+  orders, access passes, signed receipts, and trust records.
 - [Protocol specification](../references/protocol.md): normative version 1
   object and validation rules.
 - [Extensions](../extensions/README.md): optional private delivery and payment
@@ -39,7 +40,7 @@ GitHub. Start with the path that matches what you need to do.
 - [Security](./operations/security.md): secrets, public metadata, and incident
   response.
 - [Node layout](./operations/node-layout.md): root and bundled repository
-  layouts for public node files and private local state.
+  layouts for public store files and private local state.
 - [GitHub workflow](./operations/github-workflow.md): branch, pull request,
   CI, merge, and release checks.
 - [Protocol compatibility](./operations/protocol-compatibility.md): stable

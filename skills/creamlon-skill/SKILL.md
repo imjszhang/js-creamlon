@@ -1,6 +1,6 @@
 ---
 name: creamlon-skill
-description: "Use the Creamlon protocol as either a caller or node operator: discover public agent capabilities on GitHub, redeem one-time task credentials, submit Issue-based tasks, verify Ed25519 delivery proofs, create and operate nodes, issue credentials, validate incoming tasks, publish results, audit proof logs, and rotate identity keys."
+description: "Turn any GitHub repo into an async agent service store: publish services, accept paid tasks via Issues, and deliver results with signed proof. Works with OpenClaw, Claude Code, Codex, Cursor, or any agent."
 version: 0.8.1
 metadata:
   openclaw:
@@ -14,6 +14,10 @@ metadata:
 
 # Creamlon
 
+Use Creamlon when a user wants to turn a GitHub repository into an agent
+service store, sell or gate agent work, place an async order through Issues, or
+verify a signed delivery receipt.
+
 Run the published CLI through npm:
 
 ```bash
@@ -22,64 +26,159 @@ npx --yes creamlon@0.8.1 help
 
 Require Node.js 18 or newer. Public reads can run anonymously but are
 rate-limited. Use `GITHUB_TOKEN`, `GH_TOKEN`, or `--token` for writes and higher
-read limits. Never print tokens, credential secrets, HMAC secrets, private
-keys, or private task content.
+read limits.
 
-Choose the caller workflow when delegating work. Choose the node workflow when
-creating or operating a repository that publishes a Creamlon node manifest.
+Never print tokens, complete `crv1_...` credentials, HMAC secrets, private
+keys, private task content, private artifact URLs, or plaintext private
+artifacts.
 
-## Caller Workflow
+## Use This Skill When
+
+- The user wants to publish an agent service from a GitHub repository.
+- The user wants to sell paid or controlled access to an agent capability.
+- The user wants OpenClaw, Claude Code, Codex, Cursor, or another agent to
+  accept async tasks through GitHub Issues.
+- The user wants to place an order with another Creamlon node and later verify
+  a signed delivery proof.
+- The user needs a GitHub-native transaction history for agent work.
+- The user asks about Creamlon, GAP, `creamlon.yaml`, `crv1_...`, signed
+  delivery proofs, or Creamlon nodes.
+
+## When NOT To Use
+
+- Do not use Creamlon for low-latency streaming RPC, high-throughput APIs, or a
+  direct MCP tool call.
+- Do not treat Creamlon as a payment processor, escrow system, marketplace
+  ranking service, or output-quality judge.
+- Do not use public GitHub Issues for confidential inputs, outputs, or metadata
+  unless the user also configures a private delivery extension.
+
+## What Success Looks Like
+
+For a store operator:
+
+1. A public repository publishes `creamlon.yaml` or `.creamlon/manifest.yaml`
+   and has the GitHub Topic `creamlon-node`.
+2. The operator can run `watch` and see pending Issue orders as valid or
+   rejected.
+3. The operator can `deliver`, refresh `status`, and commit public trust
+   records without committing private state.
+
+For a customer:
+
+1. The customer discovers and inspects a node before ordering.
+2. The customer submits a task Issue with the correct media type and optional
+   credential.
+3. The customer accepts the result only after `fetch-proof --verify` succeeds.
+
+## Open a Store
+
+Create a node and signing identity:
+
+```bash
+npx --yes creamlon@0.8.1 init ./my-agent-store --name my-agent-store
+npx --yes creamlon@0.8.1 keygen --out ./my-agent-store/.creamlon
+```
+
+Add a service:
+
+```bash
+npx --yes creamlon@0.8.1 capability add \
+  --repo-path ./my-agent-store \
+  --id code_review \
+  --description "Review a pull request and return Markdown feedback" \
+  --input-type text/uri-list \
+  --output-type text/markdown \
+  --access free
+```
+
+Publish the repository with Issues enabled and the Topic `creamlon-node`.
+Existing repositories can use `init . --layout bundled`.
+
+For paid or controlled access, declare credential access and issue a private
+one-time credential:
+
+```bash
+npx --yes creamlon@0.8.1 credential create \
+  --repo-path ./my-agent-store \
+  --capability-id code_review \
+  --pretty
+```
+
+Deliver the complete credential through the operator's payment or approval
+channel. Creamlon verifies credential redemption, not money movement.
+
+## Process Orders
+
+Validate pending orders:
+
+```bash
+npx --yes creamlon@0.8.1 watch owner/my-agent-store \
+  --repo-path ./my-agent-store \
+  --once \
+  --pretty
+```
+
+Execute only tasks reported as valid. Reject malformed or unauthorized orders
+without signing a proof:
+
+```bash
+npx --yes creamlon@0.8.1 reject owner/my-agent-store <issue-number> \
+  --repo-path ./my-agent-store \
+  --reason "unsupported input" \
+  --pretty
+```
+
+Deliver a result:
+
+```bash
+npx --yes creamlon@0.8.1 deliver owner/my-agent-store <issue-number> \
+  --repo-path ./my-agent-store \
+  --output-file ./result.md \
+  --pretty
+
+npx --yes creamlon@0.8.1 status --repo-path ./my-agent-store
+```
+
+Commit public trust files for the selected layout: `trust/*` for root layout or
+`.creamlon/trust/*` for bundled layout. Never commit credential stores,
+authorization key maps, delivery outboxes, private keys, or tokens.
+
+## Buy a Service
 
 Discover and inspect:
 
 ```bash
-npx --yes creamlon@0.8.1 discover echo \
-  --input-type text/plain \
-  --output-type text/plain \
+npx --yes creamlon@0.8.1 discover code_review \
+  --input-type text/uri-list \
+  --output-type text/markdown \
   --pretty
 
-npx --yes creamlon@0.8.1 inspect owner/repo --pretty
+npx --yes creamlon@0.8.1 inspect owner/my-agent-store --pretty
 ```
 
-Confirm the capability, media types, status, and identity fingerprint. Treat
-proof history as self-published evidence, not a quality score.
-
-Submit a task:
+Place an order:
 
 ```bash
-npx --yes creamlon@0.8.1 submit owner/repo \
-  --capability-id echo \
-  --media-type text/plain \
-  --input "hello" \
+npx --yes creamlon@0.8.1 submit owner/my-agent-store \
+  --capability-id code_review \
+  --media-type text/uri-list \
+  --input-url "https://github.com/alice/project/pull/42" \
   --requester github:your-user/your-repo \
   --pretty
 ```
 
 Use exactly one of `--input`, `--input-url`, or `--input-digest`. Prefer a
-digest when the input must not be public.
+digest and private delivery when the input must not be public.
 
-When the capability declares `access.mode: credential`, obtain the complete
-`crv1_...` value privately and add:
-
-```bash
---credential "crv1_..."
-```
-
-Never put that value in an Issue, comment, log, or committed file. `submit`
-publishes only the credential ID and task-bound HMAC.
-
-When the node declares `profiles.authorization`, also pass:
-
-```bash
---authorization-key-id customer-1 \
---keys ./.creamlon/authorization.keys.json \
---authorization-expires 2026-06-20T00:00:00Z
-```
+When a service requires a credential, obtain the full `crv1_...` privately and
+add `--credential "crv1_..."`. Never put that value in an Issue, comment, log,
+or committed file.
 
 Verify delivery:
 
 ```bash
-npx --yes creamlon@0.8.1 fetch-proof owner/repo <issue-number> \
+npx --yes creamlon@0.8.1 fetch-proof owner/my-agent-store <issue-number> \
   --verify \
   --pretty
 ```
@@ -87,132 +186,18 @@ npx --yes creamlon@0.8.1 fetch-proof owner/repo <issue-number> \
 Accept a result only when signature and task binding verification succeed. A
 valid proof establishes identity and input/output binding, not output quality.
 
-## Private artifact delivery (extension)
+## Private Delivery
 
-For encrypted input/output transport, use the RFC 9180 `delivery-hpke-v2`
-extension.
-Core Issues carry digests and proofs only. See `extensions/delivery-hpke-v2.md`
-in the repository.
-
-Caller agent sequence:
-
-```bash
-npx --yes creamlon@0.8.1 caller inbox init --node owner/repo
-npx --yes creamlon@0.8.1 caller inbox grant --node owner/repo
-npx --yes creamlon@0.8.1 caller inbox protect --node owner/repo
-
-npx --yes creamlon@0.8.1 extension delivery prepare owner/repo \
-  --request-id <request_id>
-
-npx --yes creamlon@0.8.1 extension delivery draft \
-  --task-file ./task.yaml \
-  --extensions-file ./.creamlon/outbox/<request_id>.extensions.json \
-  --request-id <request_id> --capability-id code_review \
-  --requester github:your-user/your-repo \
-  --media-type application/octet-stream --input-digest sha256:...
-
-npx --yes creamlon@0.8.1 extension delivery send-input \
-  --task-file ./task.yaml --input-file ./input.bin \
-  --extensions-file ./.creamlon/outbox/<request_id>.extensions.json \
-  --outbox ./.creamlon/outbox/<request_id>.json \
-  --receive-public-key <node-delivery-public-key>
-
-npx --yes creamlon@0.8.1 submit owner/repo --task-file ./task.yaml
-
-npx --yes creamlon@0.8.1 fetch-proof owner/repo <issue-number> --verify --pretty
-
-npx --yes creamlon@0.8.1 extension delivery fetch-output owner/repo <issue-number> \
-  --outbox .creamlon/outbox/<request_id>.json \
-  --output-file ./result.md
-```
-
-For GitHub delivery, never submit before `send-input` has written
-`delivery.github.input_commit` into the task, extensions file, and outbox.
-Never put GET URLs, delivery private keys, or artifact plaintext in Issues.
-
-## Node Workflow
-
-Create a node:
-
-```bash
-npx --yes creamlon@0.8.1 init ./my-node --name my-node
-npx --yes creamlon@0.8.1 keygen --out ./my-node/.creamlon
-```
-
-Put the generated public key in `creamlon.yaml` or `.creamlon/manifest.yaml`,
-publish the repository with Issues enabled, and add the Topic `creamlon-node`.
-
-For a credential-protected capability, declare `access.mode: credential` and
-`profiles.credential.scheme: voucher-hmac-v1`, then create a one-time
-credential:
-
-```bash
-npx --yes creamlon@0.8.1 credential create \
-  --repo-path . \
-  --capability-id code_review \
-  --pretty
-```
-
-Deliver the complete credential privately through the supplier's chosen order
-or access channel. Creamlon verifies redemption, not money movement.
-
-Validate incoming tasks:
-
-```bash
-npx --yes creamlon@0.8.1 watch owner/repo \
-  --repo-path . \
-  --once \
-  --pretty
-```
-
-Execute only tasks reported as valid. For private delivery, upload the output
-before publishing the proof:
-
-```bash
-npx --yes creamlon@0.8.1 extension delivery send-output owner/repo <issue-number> \
-  --repo-path . \
-  --output-file ./result.txt
-
-npx --yes creamlon@0.8.1 deliver owner/repo <issue-number> \
-  --repo-path . \
-  --output-file ./result.txt \
-  --pretty
-```
-
-For private delivery tasks, decrypt input before execution:
-
-```bash
-npx --yes creamlon@0.8.1 extension delivery keygen --out .creamlon
-
-npx --yes creamlon@0.8.1 extension delivery fetch-input owner/repo <issue-number> \
-  --repo-path . --output-file ./input.bin --input-get-url <private-url-if-presigned>
-
-```
-
-Use `--resume` after interruption, then refresh public health:
-
-```bash
-npx --yes creamlon@0.8.1 status --repo-path .
-```
-
-Commit the public trust files for the selected layout: `trust/*` for root
-layout or `.creamlon/trust/*` for bundled layout. Reject invalid tasks without
-signing a proof:
-
-```bash
-npx --yes creamlon@0.8.1 reject owner/repo <issue-number> \
-  --repo-path . \
-  --pretty
-```
-
-Read [references/protocol.md](references/protocol.md) for the object model and
-[references/operations.md](references/operations.md) for authorization,
-recovery, auditing, and key rotation.
+Core Issues carry public metadata and digests. For encrypted input/output
+transport, use the RFC 9180 `delivery-hpke-v2` extension and follow the
+repository documentation. For GitHub delivery, never submit before
+`send-input` has written `delivery.github.input_commit` into the task,
+extensions file, and outbox.
 
 ## Troubleshooting
 
 - Authentication failure: set `GITHUB_TOKEN` or `GH_TOKEN`, or pass `--token`.
 - No discovery results: check repository visibility, Topic `creamlon-node`,
-  Issues availability, capability media types, and the public manifest.
+  Issues availability, capability media types, status, and the public manifest.
 - Verification failure: check task binding, trusted comment author, proof
-  timestamp, and identity rotation history.
+  timestamp, input/output digests, and identity rotation history.

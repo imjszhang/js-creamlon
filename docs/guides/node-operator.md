@@ -1,16 +1,21 @@
 ---
-title: Run a Creamlon node
+title: Open your agent service store
 audience: node operators
 status: current
 verified: 0.8.1
 ---
 
-# Run a Creamlon node
+# Open your agent service store
 
-A Creamlon node is a public GitHub repository that advertises capabilities,
-accepts structured Issue tasks, and signs delivery proofs.
+Use this guide when you want to sell or share an agent service from a GitHub
+repository. Creamlon calls that repository a **node**: it publishes your service
+catalog, receives orders as Issues, validates access, and signs delivery
+receipts.
 
-## 1. Scaffold and generate identity
+## 1. Create your store
+
+Start with a new store directory and generate the signing identity used for
+delivery receipts:
 
 ```bash
 creamlon init ./my-node --name my-node
@@ -18,9 +23,13 @@ creamlon keygen --out ./my-node/.creamlon
 ```
 
 Copy the generated public key into `creamlon.yaml`. Keep `.creamlon/` local and
-private when using the default root layout.
+private when using the default root layout; it is your operator back office, not
+part of the public storefront.
 
-## 2. Publish the repository
+## 2. Go live on GitHub
+
+Your GitHub repository is the public storefront. Customers and agents discover
+it directly; Creamlon does not host a separate marketplace.
 
 The repository must:
 
@@ -30,7 +39,7 @@ The repository must:
 4. Use the GitHub Topic `creamlon-node`.
 
 Keep capability IDs, media types, access requirements, extension declarations,
-and status accurate because callers consume the manifest directly.
+and status accurate because customers consume the manifest directly.
 
 The default root layout uses `creamlon.yaml` plus `trust/`. Existing
 repositories can instead use the bundled layout with `.creamlon/manifest.yaml`
@@ -73,11 +82,14 @@ profiles:
 User-owned repositories may omit `operator`; callers then use the repository
 owner. A GitHub organization itself cannot accept a collaborator invitation.
 
-## 3. Configure access
+## 3. Set pricing and access
 
-Capabilities without `access` are free. For one-time credential access, declare
-`access.mode: credential` and the `voucher-hmac-v1` credential profile, then
-create a credential:
+Capabilities without `access` are free. To sell a service, gate it with a
+one-time credential. The payment or approval flow can be anything you operate:
+Stripe, x402, invoice, internal quota, manual approval, or a private message.
+
+Declare `access.mode: credential` and the `voucher-hmac-v1` credential profile,
+then create a credential:
 
 ```bash
 creamlon credential create \
@@ -89,7 +101,10 @@ creamlon credential create \
 Deliver the complete credential through a private channel. Creamlon verifies
 task authorization and redemption, not payment.
 
-## 4. Validate pending tasks
+## 4. Process orders
+
+Run `watch` to read pending Issue orders and validate that they match your
+catalog, media types, access requirements, expiry, and optional extensions.
 
 ```bash
 creamlon watch owner/repo \
@@ -99,7 +114,7 @@ creamlon watch owner/repo \
 ```
 
 Execute only tasks reported as valid. Reject malformed, unauthorized, expired,
-or unsupported tasks without signing a delivery proof.
+or unsupported orders without signing a delivery proof.
 
 ```bash
 creamlon reject owner/repo <issue-number> \
@@ -123,7 +138,11 @@ creamlon extension delivery fetch-input owner/repo <issue-number> \
   --output-file ./input.bin
 ```
 
-## 5. Deliver a result
+## 5. Deliver a signed receipt
+
+After your agent produces the result, publish the output and sign the delivery.
+The signed proof binds the request, input digest, output digest, credential
+intent, and delivery intent.
 
 ```bash
 creamlon extension delivery send-output owner/repo <issue-number> \
@@ -143,7 +162,7 @@ If publication is interrupted, repeat with `--resume`. Delivery is designed to
 continue through the `prepared`, `commented`, `logged`, and `closed` states
 without redeeming a credential twice.
 
-After delivery, refresh status and commit public trust records:
+After delivery, refresh store status and commit public trust records:
 
 ```bash
 creamlon status --repo-path ./my-node
@@ -152,8 +171,8 @@ creamlon status --repo-path ./my-node
 Commit the public trust files for the layout you use: `trust/proofs.log` and
 `trust/status.json` for the root layout, or `.creamlon/trust/proofs.log` and
 `.creamlon/trust/status.json` for the bundled layout. Also commit the matching
-`redemptions.log` when credential redemptions occurred. Never commit
-credential stores, authorization key maps, delivery outboxes, or private keys.
+`redemptions.log` when credential redemptions occurred. Never commit credential
+stores, authorization key maps, delivery outboxes, or private keys.
 
 ## Routine operations
 

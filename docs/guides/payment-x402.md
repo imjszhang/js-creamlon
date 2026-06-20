@@ -7,10 +7,14 @@ verified: 0.8.1
 
 # x402 payment bridge
 
-Use x402 when a caller agent should pay for a Creamlon capability without a
-checkout account, invoice, or manual approval. Creamlon still verifies the
-one-time credential and delivery proof; x402 only decides when an application
-service may issue that credential.
+Use x402 when your agent service store should sell access directly to caller
+agents without a checkout account, invoice, or manual approval. x402 is one
+possible payment rail; Creamlon still verifies the one-time credential and
+delivery proof.
+
+In store terms, the x402 resource server is the counter where a customer pays
+for one access pass. After settlement, it issues a private `crv1_...`
+credential that the customer uses when placing the GitHub Issue order.
 
 This guide uses the [payment bridge pattern](../../extensions/payment-bridge-v1.md).
 The sample resource server lives in

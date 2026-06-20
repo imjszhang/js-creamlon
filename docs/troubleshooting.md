@@ -18,12 +18,14 @@ from this page's `verified` value.
 
 ## Authentication fails
 
+Most write operations act on a store repository or an order Issue.
 Set `GITHUB_TOKEN` or `GH_TOKEN`, or pass `--token`. Confirm that the token can
 access the repository and perform the requested read, Issue, or content
 operation. Do not print the token while diagnosing the problem.
 
 ## Discovery returns no nodes
 
+Discovery only lists repositories that are valid public service stores.
 Check that the node repository is public, non-forked, non-archived, has Issues
 enabled, uses the `creamlon-node` Topic, and publishes a valid manifest at
 `creamlon.yaml` or `.creamlon/manifest.yaml`. Confirm capability ID, status,
@@ -31,24 +33,27 @@ and media-type filters. Use `--refresh` to bypass the local discovery cache.
 
 ## Submission is rejected
 
+An order is rejected when it does not match the current service catalog.
 Inspect the current manifest. Confirm the capability ID and media type, use
 exactly one input location, and provide expiry or access options required by
 the node. A credential must match the node, capability, task intent, and expiry.
 
 ## A credential cannot be reused
 
-This is expected after successful redemption. Credentials authorize one task
-intent and are consumed when delivery is accepted, even if later publication
-must be resumed.
+This is expected after successful redemption. A credential is a one-time access
+pass for one order intent and is consumed when delivery is accepted, even if
+later publication must be resumed.
 
 ## Delivery stopped partway through
 
+Delivery is designed to resume without minting a second receipt.
 Run the same `deliver` command with `--resume`. Do not create a second proof or
 manually edit redemption state. After recovery, run `audit` and refresh
 `status`.
 
 ## Proof verification fails
 
+Treat the delivery receipt as untrusted until verification succeeds.
 Treat the result as unverified. Check the Issue number, repository, comment
 author, current or historical node identity, task input digest, output digest,
 credential binding, and key-rotation history.

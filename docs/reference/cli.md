@@ -21,15 +21,15 @@ matches the documentation version you are reading.
 
 | Goal | Commands |
 | --- | --- |
-| Discover and inspect nodes | `discover`, `inspect` |
-| Manage local node manifest | `capability add`, `capability update`, `capability remove`, `capability list`, `payment set-provider`, `payment remove-provider`, `payment list`, `delivery set-config`, `delivery show-config`, `node set-status`, `node set-name`, `node set-description`, `validate` |
-| Submit and verify tasks | `submit`, `tasks`, `cancel`, `fetch-proof` |
-| Operate task Issues | `watch`, `deliver`, `reject` |
-| Manage node identity | `keygen`, `key-rotate` |
-| Manage access | `credential create`, `credential list`, `credential show`, `credential revoke`, `credential gc`, `hmac-key-new`, `hmac-key-list`, `hmac-key-revoke`, `hmac-key-rotate` |
+| Find and inspect service stores | `discover`, `inspect` |
+| Manage your service catalog | `capability add`, `capability update`, `capability remove`, `capability list`, `payment set-provider`, `payment remove-provider`, `payment list`, `delivery set-config`, `delivery show-config`, `node set-status`, `node set-name`, `node set-description`, `validate` |
+| Place and verify orders | `submit`, `tasks`, `cancel`, `fetch-proof` |
+| Process order Issues | `watch`, `deliver`, `reject` |
+| Manage store identity | `keygen`, `key-rotate` |
+| Manage access passes | `credential create`, `credential list`, `credential show`, `credential revoke`, `credential gc`, `hmac-key-new`, `hmac-key-list`, `hmac-key-revoke`, `hmac-key-rotate` |
 | Manage caller inboxes | `caller inbox init`, `caller inbox grant`, `caller inbox protect`, `caller inbox check`, `caller inbox revoke`, `caller inbox list`, `caller inbox remove` |
-| Work with proofs | `hash`, `sign`, `verify`, `proofs list`, `proofs show`, `audit`, `status` |
-| Create a node | `init` |
+| Work with signed receipts | `hash`, `sign`, `verify`, `proofs list`, `proofs show`, `audit`, `status` |
+| Create a store | `init` |
 | Use private delivery | `extension delivery keygen`, `extension delivery prepare`, `extension delivery draft`, `extension delivery send-input`, `extension delivery fetch-input`, `extension delivery send-output`, `extension delivery fetch-output`, `extension delivery status`, `extension delivery cleanup` |
 
 ## Common Options

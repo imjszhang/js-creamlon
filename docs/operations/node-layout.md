@@ -8,10 +8,13 @@ verified: 0.8.1
 # Node layout
 
 Creamlon supports two public node layouts. The root layout remains the default
-created by `creamlon init`. The bundled layout lets an existing repository keep
-Creamlon protocol files under `.creamlon/`.
+created by `creamlon init`. Use it for a new service store. The bundled layout
+lets an existing repository add Creamlon store files under `.creamlon/` without
+moving unrelated project files.
 
 ## Root layout
+
+Use the root layout when the repository is primarily the agent service store.
 
 ```text
 creamlon.yaml
@@ -33,6 +36,9 @@ In the root layout, `creamlon.yaml` and `trust/*` are public committed files.
 The `.creamlon/` directory is local private state and should be ignored.
 
 ## Bundled layout
+
+Use the bundled layout when you are adding a Creamlon service store to an
+existing code, content, or agent repository.
 
 ```text
 .creamlon/

@@ -7,9 +7,10 @@ verified: 0.8.1
 
 # Security
 
-Creamlon uses public GitHub repositories and Issues. Treat repository names,
-Issue metadata, timestamps, actors, capability IDs, URLs, inline inputs, and
-comments as public information.
+Creamlon stores use public GitHub repositories and Issues as storefronts,
+order records, and delivery receipt transports. Treat repository names, Issue
+metadata, timestamps, actors, capability IDs, URLs, inline inputs, and comments
+as public information.
 
 ## Layout boundary
 
@@ -48,9 +49,9 @@ from being accepted as the original task.
 
 ## Verify before accepting
 
-Callers should use `fetch-proof --verify` and reject signature, author,
-identity, task-binding, or digest mismatches. A valid proof is not a quality or
-confidentiality guarantee.
+Customers should use `fetch-proof --verify` and reject signature, author,
+identity, task-binding, or digest mismatches. A valid proof is a signed
+delivery receipt, not a quality or confidentiality guarantee.
 
 Creamlon treats proof comments from repository owners, members,
 collaborators, and GitHub Apps as trusted proof carriers. Only grant Issue
