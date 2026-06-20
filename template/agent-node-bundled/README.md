@@ -5,17 +5,18 @@ Creamlon node published through this repository with bundled Creamlon files.
 ## Setup
 
 ```bash
-npx --yes creamlon@0.8.1 keygen --out .creamlon
+npx --yes creamlon@0.8.1 keygen --out .creamlon/runtime
 ```
 
-1. Put `public.b64url` in `.creamlon/manifest.yaml` at `identity.public_key`.
+1. Put `.creamlon/runtime/public.b64url` in `.creamlon/manifest.yaml` at `identity.public_key`.
 2. Keep the repository public with GitHub Issues enabled.
 3. Add the GitHub Topic `creamlon-node`.
 4. Commit `.creamlon/manifest.yaml` and `.creamlon/trust/`.
-5. Keep private `.creamlon` state ignored by exact path.
+5. Keep private operator state in `.creamlon/runtime/`, which is git-ignored.
 
 Do not ignore the whole `.creamlon/` directory in this layout. The manifest
-and trust records are public protocol files.
+and trust records are public protocol files; `.creamlon/runtime/` is private
+operator state.
 
 ## External agents
 
@@ -50,6 +51,6 @@ npx --yes creamlon@0.8.1 credential create \
   --capability-id <capability-id>
 ```
 
-Keep `.creamlon/credentials.json` private. Commit
+Keep `.creamlon/runtime/credentials.json` private. Commit
 `.creamlon/trust/redemptions.log` alongside `.creamlon/trust/proofs.log` after
 credential-backed delivery.

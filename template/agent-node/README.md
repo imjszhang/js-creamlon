@@ -5,10 +5,10 @@ Creamlon node published through this repository.
 ## Setup
 
 ```bash
-npx --yes creamlon@0.8.1 keygen --out .creamlon
+npx --yes creamlon@0.8.1 keygen --out .creamlon/runtime
 ```
 
-1. Put `public.b64url` in `creamlon.yaml` at `identity.public_key`.
+1. Put `.creamlon/runtime/public.b64url` in `creamlon.yaml` at `identity.public_key`.
 2. Keep the repository public with GitHub Issues enabled.
 3. Add the GitHub Topic `creamlon-node`.
 4. Keep `.creamlon/` private and local.
@@ -41,5 +41,5 @@ npx --yes creamlon@0.8.1 credential create \
   --capability-id <capability-id>
 ```
 
-Keep `.creamlon/credentials.json` private. Commit `trust/redemptions.log`
+Keep `.creamlon/runtime/credentials.json` private. Commit `trust/redemptions.log`
 alongside `trust/proofs.log` after credential-backed delivery.

@@ -6,7 +6,7 @@ Alice calls Bob's `code_review` capability.
 
 ```bash
 creamlon init ./code-review-node --name code-review-node
-creamlon keygen --out ./code-review-node/.creamlon
+creamlon keygen --out ./code-review-node/.creamlon/runtime
 ```
 
 Bob places the generated public key in the node manifest, pushes the

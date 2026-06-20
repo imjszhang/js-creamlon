@@ -79,7 +79,7 @@ For GitHub delivery, submission is deliberately upload-first:
 creamlon extension delivery prepare owner/repo --request-id <request-id>
 creamlon extension delivery draft \
   --task-file ./task.yaml \
-  --extensions-file ./.creamlon/outbox/<request-id>.extensions.json \
+  --extensions-file ./.creamlon/runtime/outbox/<request-id>.extensions.json \
   --request-id <request-id> \
   --capability-id <capability-id> \
   --requester github:your-user/your-repo \
@@ -88,8 +88,8 @@ creamlon extension delivery draft \
 creamlon extension delivery send-input \
   --task-file ./task.yaml \
   --input-file ./input.bin \
-  --extensions-file ./.creamlon/outbox/<request-id>.extensions.json \
-  --outbox ./.creamlon/outbox/<request-id>.json
+  --extensions-file ./.creamlon/runtime/outbox/<request-id>.extensions.json \
+  --outbox ./.creamlon/runtime/outbox/<request-id>.json
 creamlon submit owner/repo --task-file ./task.yaml ...
 ```
 
@@ -109,7 +109,7 @@ For a melon using the optional HMAC authorization profile, also provide
 
 ```bash
 --authorization-key-id customer-1 \
---keys ./.creamlon/authorization.keys.json \
+--keys ./.creamlon/runtime/authorization.keys.json \
 --authorization-expires 2026-06-20T00:00:00Z
 ```
 

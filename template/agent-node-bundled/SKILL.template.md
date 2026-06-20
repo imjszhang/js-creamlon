@@ -33,7 +33,7 @@ npx --yes creamlon@0.8.1 extension delivery send-output owner/repo <issue-number
   --output-file ./result.txt
 ```
 
-Generate delivery keys once with `extension delivery keygen --out .creamlon`
+Generate delivery keys once with `extension delivery keygen --out .creamlon/runtime`
 and publish `receive_public_key` in `.creamlon/manifest.yaml`.
 
 ## Deliver
@@ -70,8 +70,8 @@ Reject invalid or unsupported tasks without signing a proof.
 ## Security
 
 - Commit only `.creamlon/manifest.yaml` and `.creamlon/trust/`.
-- Never commit private keys, credential stores, authorization key maps, outbox
-  files, or delivery state.
+- Never commit `.creamlon/runtime/`; it contains private keys, credential
+  stores, authorization key maps, outbox files, and delivery state.
 - Do not expose private task data in Issue comments.
 - If authorization is enabled, rotate a leaked HMAC secret immediately.
 - Record Ed25519 identity changes with `npx --yes creamlon@0.8.1 key-rotate`.

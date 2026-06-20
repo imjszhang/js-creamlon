@@ -79,7 +79,13 @@ import {
 import { parseManifestPayment } from '../lib/extensions/payment/schema.mjs';
 import { cmdCapability, cmdDelivery, cmdNode, cmdPayment } from './manifest-edit.mjs';
 import {
+  authorizationKeysFilePath,
+  credentialsFilePath,
+  deliveriesDirPath,
+  deliverLockFilePath,
+  discoveryCacheFilePath,
   fetchRepositoryFilePreferred,
+  privateKeyFilePath,
   publicTrustFilePath,
   publicTrustFiles,
   publicTrustRelativePath,
@@ -168,14 +174,14 @@ Generate Ed25519 key pair. Writes public.key, private.key, public.b64url to --ou
 Options:
   --old-public-key <b64>  Previous public key
   --new-public-key <b64>  New public key now published in the node manifest
-  --key <path>            Previous private key (default: .creamlon/private.key)
+  --key <path>            Previous private key (default: .creamlon/runtime/private.key; legacy .creamlon/private.key supported)
   --rotated-at <iso>      Optional rotation timestamp
   --repo-path <dir>       Node repository (default: .)
 
 Appends a signed record to trust/key-rotations.log.`,
   hmacKeyNew: `creamlon hmac-key-new --key-id <id> [--out <path>]
 
-Generate an HMAC authorization key map (default: .creamlon/authorization.keys.json).`,
+Generate an HMAC authorization key map (default: .creamlon/runtime/authorization.keys.json).`,
   hmacKeyList: `creamlon hmac-key-list [--keys <path>] [--pretty]
 
 List configured HMAC authorization key ids without displaying secrets.`,
@@ -196,7 +202,7 @@ Commands:
 
 Options:
   --repo-path <dir>      Node repository (default: .)
-  --credentials <path>   Private store (default: <repo>/.creamlon/credentials.json)
+  --credentials <path>   Private store (default: <repo>/.creamlon/runtime/credentials.json; legacy supported)
   --pretty               Pretty-print JSON
 
 The complete credential is displayed by create and show. Keep it secret.`,
@@ -217,7 +223,7 @@ Options:
   --credential-digest <sha256:...>   Optional; requires --task-intent-digest
   --task-intent-digest <sha256:...>  Optional; requires --credential-digest
   --delivery-intent-digest <sha256:...> Optional delivery binding
-  --key <path>          Private key file (default: .creamlon/private.key)
+  --key <path>          Private key file (default: .creamlon/runtime/private.key; legacy .creamlon/private.key supported)
   --completed-at <iso>  Optional ISO timestamp
   --pretty              Pretty-print JSON`,
   verify: `creamlon verify [options]
@@ -353,7 +359,7 @@ Options:
   --repo-path <dir>      Local node dir (default: .)
   --keys <path>          HMAC key map
   --credentials <path>   Private credential store
-  --key <path>           Private key (default: <repo-path>/.creamlon/private.key)
+  --key <path>           Private key (default: <repo-path>/.creamlon/runtime/private.key; legacy supported)
   --ref <branch>         Manifest branch (default: main)
   --token <pat>          GitHub token (or GITHUB_TOKEN / GH_TOKEN)
   --dry-run              Print proof only; no GitHub or file writes
@@ -565,15 +571,16 @@ async function getPreferredRepositoryFile(owner, repo, paths, ref, token, option
 
 async function loadAuthorizationSecrets(opts) {
   const repoPath = resolve(opts.repoPath || '.');
-  const hmacKeys = await loadHmacKeys(opts.keys || join(repoPath, '.creamlon', 'authorization.keys.json'));
+  const hmacKeys = await loadHmacKeys(opts.keys || await authorizationKeysFilePath(repoPath));
   return { hmacKeys };
 }
 
-async function credentialPaths(opts) {
+async function credentialPaths(opts, options = {}) {
+  const { preferExisting = true } = options;
   const repoPath = resolve(opts.repoPath || '.');
   return {
     repoPath,
-    storePath: resolve(opts.credentials || join(repoPath, '.creamlon', 'credentials.json')),
+    storePath: resolve(opts.credentials || await credentialsFilePath(repoPath, { preferExisting })),
     redemptionsPath: await publicTrustFilePath(repoPath, 'redemptions.log'),
   };
 }
@@ -588,7 +595,7 @@ async function loadCredentialContext(opts) {
 }
 
 async function cmdKeygen(opts) {
-  const outDir = opts.out || '.creamlon';
+  const outDir = opts.out || '.creamlon/runtime';
   const result = await generateKeyPair(outDir);
   console.log(`Keys written to ${outDir}/`);
   console.log(`public_key (base64url): ${result.publicKeyBase64Url}`);
@@ -607,7 +614,7 @@ async function cmdHash(positional, opts) {
 }
 
 async function cmdSign(opts) {
-  const keyPath = opts.key || '.creamlon/private.key';
+  const keyPath = opts.key || await privateKeyFilePath('.');
   const required = ['requestId', 'capabilityId', 'inputDigest', 'outputDigest'];
   for (const k of required) {
     if (!opts[k]) throw usageError(`sign requires --${k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)}`);
@@ -751,7 +758,7 @@ async function cmdDiscover(positional, opts) {
   }
 
   const token = resolveToken(opts);
-  const cachePath = resolve('.creamlon', 'cache', 'discovery.json');
+  const cachePath = await discoveryCacheFilePath('.');
   const cacheKey = JSON.stringify({
     schema: 3,
     capabilityId,
@@ -934,7 +941,7 @@ async function cmdWatch(positional, opts) {
 
   let processed = new Set();
   if (opts.repoPath) {
-    const proofsPath = join(resolve(opts.repoPath), 'trust', 'proofs.log');
+    const proofsPath = await publicTrustFilePath(resolve(opts.repoPath), 'proofs.log');
     processed = await loadProcessedIds(proofsPath);
   }
 
@@ -1016,19 +1023,17 @@ async function cmdDeliver(positional, opts) {
 
   const token = resolveToken(opts);
   const repoPath = resolve(opts.repoPath || '.');
-  const keyPath = opts.key || join(repoPath, '.creamlon', 'private.key');
+  const keyPath = opts.key || await privateKeyFilePath(repoPath);
   const proofsPath = await publicTrustFilePath(repoPath, 'proofs.log');
   const redemptionsPath = await publicTrustFilePath(repoPath, 'redemptions.log');
   const proofsRelPath = await publicTrustRelativePath(repoPath, 'proofs.log');
   const redemptionsRelPath = await publicTrustRelativePath(repoPath, 'redemptions.log');
-  const statePath = join(repoPath, '.creamlon', 'deliveries', `${issueNumber}.json`);
-  const outputStatePath = join(
-    repoPath,
-    '.creamlon',
-    'deliveries',
-    `${issueNumber}.output.json`,
-  );
-  const lockPath = join(repoPath, '.creamlon', 'deliver.lock');
+  const existingDeliveriesDir = await deliveriesDirPath(repoPath);
+  const runtimeDeliveriesDir = await deliveriesDirPath(repoPath, { preferExisting: false });
+  const statePath = join(existingDeliveriesDir, `${issueNumber}.json`);
+  const runtimeStatePath = join(runtimeDeliveriesDir, `${issueNumber}.json`);
+  const outputStatePath = join(existingDeliveriesDir, `${issueNumber}.output.json`);
+  const lockPath = await deliverLockFilePath(repoPath, { preferExisting: false });
   const releaseLock = opts.dryRun ? null : await acquireDeliveryLock(lockPath);
 
   try {
@@ -1038,6 +1043,7 @@ async function cmdDeliver(positional, opts) {
     const issue = await getIssue(owner, repo, issueNumber, token);
     const task = parseTask(issue.body || '');
     const existingState = await readDeliveryState(statePath);
+    const writeStatePath = existingState ? statePath : runtimeStatePath;
     if (opts.resume && !existingState) fail('no delivery state to resume', 4);
 
     const processed = await loadProcessedIds(proofsPath);
@@ -1115,7 +1121,7 @@ async function cmdDeliver(positional, opts) {
       proof,
       updated_at: new Date().toISOString(),
     };
-    await writeDeliveryState(statePath, state);
+    await writeDeliveryState(writeStatePath, state);
 
     if (state.status === 'prepared') {
       const comments = await getIssueComments(owner, repo, issueNumber, token);
@@ -1129,7 +1135,7 @@ async function cmdDeliver(positional, opts) {
       }
       state.status = 'commented';
       state.updated_at = new Date().toISOString();
-      await writeDeliveryState(statePath, state);
+      await writeDeliveryState(writeStatePath, state);
     }
 
     if (state.status === 'commented') {
@@ -1149,14 +1155,14 @@ async function cmdDeliver(positional, opts) {
       }
       state.status = 'logged';
       state.updated_at = new Date().toISOString();
-      await writeDeliveryState(statePath, state);
+      await writeDeliveryState(writeStatePath, state);
     }
 
     if (state.status === 'logged') {
       if (issue.state !== 'closed') await closeIssue(owner, repo, issueNumber, token);
       state.status = 'closed';
       state.updated_at = new Date().toISOString();
-      await writeDeliveryState(statePath, state);
+      await writeDeliveryState(writeStatePath, state);
     }
 
     printJson({
@@ -1566,7 +1572,7 @@ async function cmdKeyRotate(opts) {
     throw usageError('key-rotate --rotated-at cannot be in the future');
   }
   const repoPath = resolve(opts.repoPath || '.');
-  const privateKey = await readPrivateKeyFile(opts.key || join(repoPath, '.creamlon', 'private.key'));
+  const privateKey = await readPrivateKeyFile(opts.key || await privateKeyFilePath(repoPath));
   const signingPublicKey = publicKeyToBase64Url(createPublicKey(privateKey));
   if (signingPublicKey !== opts.oldPublicKey) {
     fail('private key does not match --old-public-key');
@@ -1604,7 +1610,7 @@ async function cmdKeyRotate(opts) {
 
 async function cmdHmacKeyNew(opts) {
   if (!opts.authorizationKeyId) throw usageError('hmac-key-new requires --key-id');
-  const outPath = resolve(opts.out || '.creamlon/authorization.keys.json');
+  const outPath = resolve(opts.out || await authorizationKeysFilePath('.', { preferExisting: false }));
   let keys = {};
   try {
     keys = JSON.parse(await readFile(outPath, 'utf8'));
@@ -1621,8 +1627,8 @@ async function cmdHmacKeyNew(opts) {
   console.log(`HMAC authorization key written to ${outPath}`);
 }
 
-function hmacKeysPath(opts) {
-  return resolve(opts.keys || '.creamlon/authorization.keys.json');
+async function hmacKeysPath(opts) {
+  return resolve(opts.keys || await authorizationKeysFilePath('.'));
 }
 
 async function readHmacKeyObject(path) {
@@ -1645,7 +1651,7 @@ async function writeHmacKeyObject(path, keys) {
 }
 
 async function cmdHmacKeyList(opts) {
-  const path = hmacKeysPath(opts);
+  const path = await hmacKeysPath(opts);
   const keys = await readHmacKeyObject(path);
   printJson({
     path,
@@ -1656,7 +1662,7 @@ async function cmdHmacKeyList(opts) {
 
 async function cmdHmacKeyRevoke(opts) {
   if (!opts.authorizationKeyId) throw usageError('hmac-key-revoke requires --key-id');
-  const path = hmacKeysPath(opts);
+  const path = await hmacKeysPath(opts);
   const keys = await readHmacKeyObject(path);
   if (!Object.hasOwn(keys, opts.authorizationKeyId)) {
     fail(`unknown authorization key: ${opts.authorizationKeyId}`, 4);
@@ -1673,7 +1679,7 @@ async function cmdHmacKeyRevoke(opts) {
 
 async function cmdHmacKeyRotate(opts) {
   if (!opts.authorizationKeyId) throw usageError('hmac-key-rotate requires --key-id');
-  const path = hmacKeysPath(opts);
+  const path = await hmacKeysPath(opts);
   const keys = await readHmacKeyObject(path);
   if (!Object.hasOwn(keys, opts.authorizationKeyId)) {
     fail(`unknown authorization key: ${opts.authorizationKeyId}`, 4);
@@ -1689,7 +1695,9 @@ async function cmdHmacKeyRotate(opts) {
 
 async function cmdCredential(positional, opts) {
   const action = positional[1];
-  const { storePath, redemptionsPath } = await credentialPaths(opts);
+  const { storePath, redemptionsPath } = await credentialPaths(opts, {
+    preferExisting: action !== 'create',
+  });
   const redemptions = await loadRedemptions(redemptionsPath);
 
   if (action === 'create') {
@@ -1903,7 +1911,7 @@ async function cmdInit(positional, opts) {
     skipExisting,
   });
   console.log(`Created agent node at ${dest}`);
-  console.log(`Next: creamlon keygen --out ${join(dest, '.creamlon')}`);
+  console.log(`Next: creamlon keygen --out ${join(dest, '.creamlon', 'runtime')}`);
   if (layout === 'bundled') {
     console.log('Then paste public_key into .creamlon/manifest.yaml.');
     console.log('Commit .creamlon/manifest.yaml, .creamlon/README.md, and .creamlon/trust/.');

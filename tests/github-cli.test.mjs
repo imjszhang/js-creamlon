@@ -334,7 +334,7 @@ test('paid submit hides secret and deliver atomically redeems credential into pr
   let issueBody = null;
   let issueState = 'open';
   try {
-    const keygen = await generateKeyPair(join(dir, '.creamlon'));
+    const keygen = await generateKeyPair(join(dir, '.creamlon', 'runtime'));
     const manifestText = CREDENTIAL_MANIFEST_YAML.replace('PLACEHOLDER', keygen.publicKeyBase64Url);
     const manifest = (await import('../lib/manifest.mjs')).parseManifest(manifestText);
     const generated = generateCredential();
@@ -418,6 +418,12 @@ test('paid submit hides secret and deliver atomically redeems credential into pr
     assert.match(proof.credential_digest, /^sha256:/);
     assert.match(proof.task_intent_digest, /^sha256:/);
     assert.ok(calls.some((item) => typeof item === 'string' && item.includes('credential_digest')));
+    const deliveryState = JSON.parse(await readFile(
+      join(dir, '.creamlon', 'runtime', 'deliveries', '91.json'),
+      'utf8',
+    ));
+    assert.equal(deliveryState.request_id, 'req-paid-cli');
+    assert.equal(deliveryState.status, 'closed');
 
     const replay = {
       version: '1',
@@ -467,7 +473,6 @@ test('deliver dry-run signs proof from mocked issue', async () => {
         'deliver', 'owner/repo', '42',
         '--repo-path', dir,
         '--output-file', outFile,
-        '--key', join(dir, '.creamlon', 'private.key'),
         ...NODE_AUTHORIZATION_ARGS,
         '--token', 'test-token',
         '--dry-run',

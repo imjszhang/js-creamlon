@@ -85,7 +85,7 @@ Create a brand-new repository whose sole purpose is the agent service store.
 
 ```bash
 creamlon init ./my-melon --name my-melon
-creamlon keygen --out ./my-melon/.creamlon
+creamlon keygen --out ./my-melon/.creamlon/runtime
 ```
 
 This generates `creamlon.yaml` and `trust/` at the repository root with a
@@ -106,7 +106,7 @@ creamlon capability add \
 my-melon/
   creamlon.yaml          # public service catalog
   trust/                 # public delivery and trust records
-  .creamlon/             # private keys, credentials, caches (git-ignored)
+  .creamlon/runtime/     # private keys, credentials, caches (git-ignored)
 ```
 
 ### Option B — Add a melon to an existing repository
@@ -117,10 +117,11 @@ touching existing files.
 ```bash
 cd ./my-existing-repo
 creamlon init . --name my-existing-repo --layout bundled
-creamlon keygen --out .creamlon
+creamlon keygen --out .creamlon/runtime
 ```
 
-Everything goes under `.creamlon/`, similar to how `.github/` stores workflows:
+Public protocol files go under `.creamlon/`, similar to how `.github/` stores
+workflows; private operator state goes under `.creamlon/runtime/`:
 
 ```text
 my-existing-repo/
@@ -130,8 +131,7 @@ my-existing-repo/
     manifest.yaml        # public service catalog
     README.md            # orientation for agents without the CLI
     trust/               # public delivery and trust records
-    private.key          # git-ignored
-    credentials.json     # git-ignored
+    runtime/             # private keys, credentials, caches (git-ignored)
 ```
 
 The CLI keeps your root `README.md`, merges ignore rules into `.gitignore`, and

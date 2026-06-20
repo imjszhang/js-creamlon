@@ -96,10 +96,12 @@ test('cli init supports bundled node layout', async () => {
 
     const gitignore = await readFile(join(dir, '.gitignore'), 'utf8');
     assert.doesNotMatch(gitignore, /^\.creamlon\/$/m);
-    assert.match(gitignore, /^\.creamlon\/private\.key$/m);
-    assert.match(gitignore, /^\.creamlon\/credentials\.json$/m);
+    assert.match(gitignore, /^\.creamlon\/runtime\/$/m);
+    assert.doesNotMatch(gitignore, /^\.creamlon\/manifest\.yaml$/m);
+    assert.doesNotMatch(gitignore, /^\.creamlon\/trust\/$/m);
 
-    const { publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon'));
+    const { publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon', 'runtime'));
+    await stat(join(dir, '.creamlon', 'runtime', 'private.key'));
     await writeFile(
       join(dir, '.creamlon', 'manifest.yaml'),
       manifestText.replace('REPLACE_WITH_public.b64url', publicKeyBase64Url),
@@ -133,11 +135,10 @@ test('cli init bundled layout can be added to an existing repository', async () 
 
     const gitignore = await readFile(join(dir, '.gitignore'), 'utf8');
     assert.match(gitignore, /^node_modules\/$/m);
-    assert.match(gitignore, /^\.creamlon\/private\.key$/m);
-    assert.match(gitignore, /^\.creamlon\/credentials\.json$/m);
+    assert.match(gitignore, /^\.creamlon\/runtime\/$/m);
     assert.doesNotMatch(gitignore, /^\.creamlon\/$/m);
 
-    const { publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon'));
+    const { publicKeyBase64Url } = await generateKeyPair(join(dir, '.creamlon', 'runtime'));
     await writeFile(
       manifestPath,
       manifestText.replace('REPLACE_WITH_public.b64url', publicKeyBase64Url),
@@ -209,6 +210,64 @@ test('delivery keygen repairs permissions when replacing an existing private key
     await chmod(privateKeyPath, 0o644);
     await runCli(['extension', 'delivery', 'keygen', '--out', dir]);
     assertPrivateMode((await stat(privateKeyPath)).mode);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('credential create defaults to runtime private store', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-credential-runtime-'));
+  try {
+    const legacyStorePath = join(dir, '.creamlon', 'credentials.json');
+    await mkdir(join(dir, '.creamlon'), { recursive: true });
+    await writeFile(legacyStorePath, `${JSON.stringify({
+      version: '1',
+      credentials: [],
+    }, null, 2)}\n`, 'utf8');
+    const result = runCreamlon([
+      'credential',
+      'create',
+      '--repo-path', dir,
+      '--capability-id', 'review',
+      '--pretty',
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout);
+    const storePath = join(dir, '.creamlon', 'runtime', 'credentials.json');
+    assert.equal(parsed.store, storePath);
+    const store = JSON.parse(await readFile(storePath, 'utf8'));
+    assert.equal(store.credentials.length, 1);
+    const legacyStore = JSON.parse(await readFile(legacyStorePath, 'utf8'));
+    assert.equal(legacyStore.credentials.length, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('credential list falls back to legacy private store', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-credential-legacy-'));
+  try {
+    const legacyStorePath = join(dir, '.creamlon', 'credentials.json');
+    await mkdir(join(dir, '.creamlon'), { recursive: true });
+    await writeFile(legacyStorePath, `${JSON.stringify({
+      version: '1',
+      credentials: [{
+        credential_id: 'legacy_credential',
+        secret: 'A'.repeat(43),
+        capability_id: 'review',
+        status: 'available',
+      }],
+    }, null, 2)}\n`, 'utf8');
+    const result = runCreamlon([
+      'credential',
+      'list',
+      '--repo-path', dir,
+      '--pretty',
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.store, legacyStorePath);
+    assert.equal(parsed.credentials[0].credential_id, 'legacy_credential');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -684,6 +743,7 @@ test('caller inbox command parses node and registry options', async () => {
       '--registry', '.creamlon/test-inboxes.yaml',
     ]),
     (error) => error.message.includes('requires GITHUB_TOKEN, GH_TOKEN, or --token')
-      || error.message.includes('failed to fetch creamlon.yaml'),
+      || error.message.includes('failed to fetch creamlon.yaml')
+      || error.message.includes('fetch failed'),
   );
 });

@@ -80,7 +80,7 @@ npm install --global creamlon@0.8.1
 
 ```bash
 creamlon init ./my-melon --name my-melon
-creamlon keygen --out ./my-melon/.creamlon
+creamlon keygen --out ./my-melon/.creamlon/runtime
 ```
 
 这会在仓库根目录生成 `creamlon.yaml` 和 `trust/`，以及一份全新的 Ed25519
@@ -101,7 +101,7 @@ creamlon capability add \
 my-melon/
   creamlon.yaml          # 公开的服务目录
   trust/                 # 公开的交付与信任记录
-  .creamlon/             # 私钥、凭证、缓存（已 git-ignore）
+  .creamlon/runtime/     # 私钥、凭证、缓存（已 git-ignore）
 ```
 
 ### 方式 B — 把现有仓库变成 melon
@@ -112,11 +112,11 @@ my-melon/
 ```bash
 cd ./my-existing-repo
 creamlon init . --name my-existing-repo --layout bundled
-creamlon keygen --out .creamlon
+creamlon keygen --out .creamlon/runtime
 ```
 
-所有 Creamlon 文件都放在 `.creamlon/` 下面，就像 `.github/` 存放 workflows
-一样：
+公开协议文件放在 `.creamlon/` 下面，就像 `.github/` 存放 workflows 一样；
+私有运行态放在 `.creamlon/runtime/`：
 
 ```text
 my-existing-repo/
@@ -126,8 +126,7 @@ my-existing-repo/
     manifest.yaml        # 公开的服务目录
     README.md            # 给没有 CLI 的 agent 看的说明
     trust/               # 公开的交付与信任记录
-    private.key          # 已 git-ignore
-    credentials.json     # 已 git-ignore
+    runtime/             # 私钥、凭证、缓存（已 git-ignore）
 ```
 
 CLI 会保留你的根目录 `README.md`，自动把忽略规则合并到 `.gitignore`，不会

@@ -669,7 +669,7 @@ test('send-output records a digest-bound receipt for deliver', async () => {
     setPresignedFetch(globalThis.fetch);
   }
   const receipt = JSON.parse(await readFile(
-    join(dir, '.creamlon', 'deliveries', '12.output.json'),
+    join(dir, '.creamlon', 'runtime', 'deliveries', '12.output.json'),
     'utf8',
   ));
   assert.equal(receipt.request_id, task.request_id);
@@ -678,8 +678,8 @@ test('send-output records a digest-bound receipt for deliver', async () => {
 
 test('delivery status lists local state and cleanup removes closed issue state', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-delivery-status-'));
-  const outboxDir = join(dir, '.creamlon', 'outbox');
-  const deliveriesDir = join(dir, '.creamlon', 'deliveries');
+  const outboxDir = join(dir, '.creamlon', 'runtime', 'outbox');
+  const deliveriesDir = join(dir, '.creamlon', 'runtime', 'deliveries');
   await mkdir(outboxDir, { recursive: true });
   await mkdir(deliveriesDir, { recursive: true });
   await writeFile(join(outboxDir, 'req-cleanup.json'), `${JSON.stringify({
@@ -748,4 +748,32 @@ test('delivery status lists local state and cleanup removes closed issue state',
   assert.equal(output.at(-1).delivery_state_count, 1);
   assert.deepEqual(output.at(-1).outboxes.map((item) => item.request_id), ['req-rejected']);
   assert.deepEqual(output.at(-1).deliveries.map((item) => item.request_id), ['req-rejected']);
+});
+
+test('delivery status falls back to legacy local state directories', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-delivery-legacy-status-'));
+  const outboxDir = join(dir, '.creamlon', 'outbox');
+  const deliveriesDir = join(dir, '.creamlon', 'deliveries');
+  await mkdir(outboxDir, { recursive: true });
+  await mkdir(deliveriesDir, { recursive: true });
+  await writeFile(join(outboxDir, 'req-legacy.json'), `${JSON.stringify({
+    request_id: 'req-legacy',
+    transport: 'github-private-repo',
+  })}\n`, 'utf8');
+  await writeFile(join(deliveriesDir, '9.json'), `${JSON.stringify({
+    version: '1',
+    issue_number: 9,
+    request_id: 'req-legacy',
+    status: 'prepared',
+  })}\n`, 'utf8');
+
+  const output = [];
+  await cmdExtensionDeliveryStatus(
+    { repoPath: dir },
+    { printJson: (value) => output.push(value) },
+  );
+  assert.equal(output.at(-1).outbox_dir, outboxDir);
+  assert.equal(output.at(-1).deliveries_dir, deliveriesDir);
+  assert.equal(output.at(-1).outbox_count, 1);
+  assert.equal(output.at(-1).delivery_state_count, 1);
 });

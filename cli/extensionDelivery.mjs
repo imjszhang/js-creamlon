@@ -33,7 +33,14 @@ import {
   writeOutbox,
 } from '../lib/extensions/delivery/outbox.mjs';
 import { writeDeliveryState } from '../lib/deliveryState.mjs';
-import { fetchRepositoryFilePreferred, publicTrustFiles } from '../lib/nodeLayout.mjs';
+import {
+  deliveriesDirPath,
+  deliveryPrivateKeyFilePath,
+  fetchRepositoryFilePreferred,
+  outboxDirPath,
+  privateRuntimeDir,
+  publicTrustFiles,
+} from '../lib/nodeLayout.mjs';
 
 function usageError(msg) {
   const err = new Error(msg);
@@ -90,7 +97,7 @@ async function verifyDeliveryProof({
 }
 
 export async function cmdExtensionDeliveryKeygen(opts) {
-  const outDir = resolve(opts.out || '.creamlon');
+  const outDir = resolve(opts.out || privateRuntimeDir('.'));
   await mkdir(outDir, { recursive: true });
   const keys = generateDeliveryKeyPair();
   await writeFile(join(outDir, 'delivery.public.b64url'), `${keys.public_key}\n`, { mode: 0o600 });
@@ -202,7 +209,7 @@ export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManife
     outputUploadUrl: opts.outputUploadUrl,
     outputGetUrl: opts.outputGetUrl,
     github,
-    outboxDir: opts.outboxDir || '.creamlon/outbox',
+    outboxDir: opts.outboxDir || await outboxDirPath('.', { preferExisting: false }),
     scheme: manifestDelivery.scheme,
   });
   const extensionsPath = opts.extensionsOut
@@ -339,7 +346,7 @@ export async function cmdExtensionDeliveryFetchInput(positional, opts, { loadMan
     requestId: task?.request_id,
   });
   if (deliveryErrors.length) fail(`invalid task delivery extension: ${deliveryErrors.join('; ')}`);
-  const keyPath = resolve(opts.deliveryKey || join(opts.repoPath || '.', '.creamlon', 'delivery.private.b64url'));
+  const keyPath = resolve(opts.deliveryKey || await deliveryPrivateKeyFilePath(opts.repoPath || '.'));
   const nodePrivateKey = await readDeliveryPrivateKey(keyPath);
   const result = await fetchInput({
     task,
@@ -372,8 +379,9 @@ export async function cmdExtensionDeliverySendOutput(positional, opts, { loadMan
     allowedPresignedHosts: parseManifestDelivery(parsed)?.presigned_hosts || null,
   });
   const repoPath = resolve(opts.repoPath || '.');
+  const deliveriesDir = await deliveriesDirPath(repoPath, { preferExisting: false });
   await writeDeliveryState(
-    join(repoPath, '.creamlon', 'deliveries', `${issueNumber}.output.json`),
+    join(deliveriesDir, `${issueNumber}.output.json`),
     {
       version: '1',
       issue_number: Number(issueNumber),
@@ -461,8 +469,8 @@ async function readJsonFiles(dir) {
 
 export async function cmdExtensionDeliveryStatus(opts, { printJson }) {
   const repoPath = resolve(opts.repoPath || '.');
-  const outboxDir = resolve(opts.outboxDir || join(repoPath, '.creamlon', 'outbox'));
-  const deliveriesDir = join(repoPath, '.creamlon', 'deliveries');
+  const outboxDir = resolve(opts.outboxDir || await outboxDirPath(repoPath));
+  const deliveriesDir = await deliveriesDirPath(repoPath);
   const [outboxes, deliveries] = await Promise.all([
     readJsonFiles(outboxDir),
     readJsonFiles(deliveriesDir),
@@ -496,8 +504,8 @@ export async function cmdExtensionDeliveryCleanup(positional, opts, { resolveTok
   const token = resolveToken(opts);
   const { owner, repo } = parseRepoSlug(slug);
   const repoPath = resolve(opts.repoPath || '.');
-  const outboxDir = resolve(opts.outboxDir || join(repoPath, '.creamlon', 'outbox'));
-  const deliveriesDir = join(repoPath, '.creamlon', 'deliveries');
+  const outboxDir = resolve(opts.outboxDir || await outboxDirPath(repoPath));
+  const deliveriesDir = await deliveriesDirPath(repoPath);
   const [outboxes, deliveries] = await Promise.all([
     readJsonFiles(outboxDir),
     readJsonFiles(deliveriesDir),
@@ -583,7 +591,7 @@ prepare options:
                                         Alternative: presigned-object-storage
   --request-id <uuid>
   --registry <path>                    Default: .creamlon/caller/inboxes.yaml
-  --outbox-dir <path>                  Default: .creamlon/outbox
+  --outbox-dir <path>                  Default: .creamlon/runtime/outbox
   --extensions-out <path>
   --input-upload-url / --input-get-url
   --output-upload-url / --output-get-url
@@ -614,7 +622,7 @@ send-input options:
 
 fetch-input options:
   --repo-path <dir>
-  --delivery-key <path>                Default: <repo>/.creamlon/delivery.private.b64url
+  --delivery-key <path>                Default: <repo>/.creamlon/runtime/delivery.private.b64url (legacy supported)
   --input-get-url <url>                Required for presigned transport
   --output-file <path>
   --token <pat>                        Node token; or GITHUB_TOKEN / GH_TOKEN

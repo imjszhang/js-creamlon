@@ -77,7 +77,7 @@ Create a melon and signing identity:
 
 ```bash
 npx --yes creamlon@0.8.1 init ./my-agent-store --name my-agent-store
-npx --yes creamlon@0.8.1 keygen --out ./my-agent-store/.creamlon
+npx --yes creamlon@0.8.1 keygen --out ./my-agent-store/.creamlon/runtime
 ```
 
 Add a service:
@@ -141,8 +141,9 @@ npx --yes creamlon@0.8.1 status --repo-path ./my-agent-store
 ```
 
 Commit public trust files for the selected layout: `trust/*` for root layout or
-`.creamlon/trust/*` for bundled layout. Never commit credential stores,
-authorization key maps, delivery outboxes, private keys, or tokens.
+`.creamlon/trust/*` for bundled layout. Never commit `.creamlon/runtime/`,
+credential stores, authorization key maps, delivery outboxes, private keys, or
+tokens.
 
 ## Buy a Service
 
