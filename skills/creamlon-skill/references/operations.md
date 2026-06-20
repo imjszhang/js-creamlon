@@ -31,7 +31,7 @@ Compute digests with `creamlon hash --file`, which hashes raw bytes.
 When a capability requires credential access, the node operator creates:
 
 ```bash
-npx --yes creamlon@0.8.1 credential create \
+npx --yes creamlon@0.8.2 credential create \
   --repo-path . \
   --capability-id <id>
 ```
@@ -50,7 +50,7 @@ Free nodes need no key map. To require HMAC authorization, declare
 `profiles.authorization.scheme: hmac-sha256` and generate a customer key:
 
 ```bash
-npx --yes creamlon@0.8.1 hmac-key-new \
+npx --yes creamlon@0.8.2 hmac-key-new \
   --key-id customer-1 \
   --out .creamlon/runtime/authorization.keys.json
 ```

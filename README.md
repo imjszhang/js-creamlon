@@ -74,7 +74,7 @@ that the receipt binds the correct input and output.
 Install the CLI first:
 
 ```bash
-npm install --global creamlon@0.8.1
+npm install --global creamlon@0.8.2
 ```
 
 There are two ways to create a melon. Pick the one that fits.

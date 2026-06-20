@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.8.2 - 2026-06-21
+
+### Added
+
+- Added a private `.creamlon/runtime/` directory convention for operator-only node
+  state such as keys, credentials, authorization keys, delivery state, outbox,
+  and cache files.
+- CLI defaults, templates, docs, and skills now point new nodes at
+  `.creamlon/runtime/` while keeping public manifests and trust logs in their
+  existing locations.
+
+### Migration
+
+- Existing `.creamlon/private.key`, `.creamlon/credentials.json`,
+  authorization keys, delivery state, outbox, and cache paths remain readable
+  when the new runtime path does not exist.
+- Explicit path flags are unchanged.
+
 ## 0.8.1 - 2026-06-19
 
 ### Added

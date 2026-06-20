@@ -2,7 +2,7 @@
 title: Protocol compatibility
 audience: maintainers and extension authors
 status: current
-verified: 0.8.1
+verified: 0.8.2
 ---
 
 # Protocol compatibility

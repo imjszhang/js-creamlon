@@ -69,7 +69,7 @@ flowchart LR
 先安装 CLI：
 
 ```bash
-npm install --global creamlon@0.8.1
+npm install --global creamlon@0.8.2
 ```
 
 有两种方式创建 melon，按你的情况选择。

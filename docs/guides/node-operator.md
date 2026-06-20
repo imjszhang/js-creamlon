@@ -2,7 +2,7 @@
 title: Open your agent service store
 audience: node operators
 status: current
-verified: 0.8.1
+verified: 0.8.2
 ---
 
 # Open your agent service store

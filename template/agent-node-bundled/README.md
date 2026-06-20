@@ -5,7 +5,7 @@ Creamlon node published through this repository with bundled Creamlon files.
 ## Setup
 
 ```bash
-npx --yes creamlon@0.8.1 keygen --out .creamlon/runtime
+npx --yes creamlon@0.8.2 keygen --out .creamlon/runtime
 ```
 
 1. Put `.creamlon/runtime/public.b64url` in `.creamlon/manifest.yaml` at `identity.public_key`.
@@ -28,16 +28,16 @@ transport details.
 ## Tasks
 
 ```bash
-npx --yes creamlon@0.8.1 watch owner/repo --repo-path . --once --pretty
-npx --yes creamlon@0.8.1 deliver owner/repo <issue-number> \
+npx --yes creamlon@0.8.2 watch owner/repo --repo-path . --once --pretty
+npx --yes creamlon@0.8.2 deliver owner/repo <issue-number> \
   --repo-path . \
   --output-file ./result.txt \
   --pretty
-npx --yes creamlon@0.8.1 status --repo-path .
+npx --yes creamlon@0.8.2 status --repo-path .
 ```
 
 Commit `.creamlon/trust/proofs.log` and `.creamlon/trust/status.json` after
-delivery. Use `npx --yes creamlon@0.8.1 deliver --resume` after an interrupted
+delivery. Use `npx --yes creamlon@0.8.2 deliver --resume` after an interrupted
 delivery.
 
 This template accepts free tasks. Add the optional authorization profile from
@@ -46,7 +46,7 @@ the credential profile and capability access block documented in the protocol,
 then issue credentials with:
 
 ```bash
-npx --yes creamlon@0.8.1 credential create \
+npx --yes creamlon@0.8.2 credential create \
   --repo-path . \
   --capability-id <capability-id>
 ```

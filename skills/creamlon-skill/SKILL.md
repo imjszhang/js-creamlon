@@ -1,7 +1,7 @@
 ---
 name: creamlon-skill
 description: "Turn any GitHub repo into an async agent service store: publish services, accept paid tasks via Issues, and deliver results with signed proof. Works with OpenClaw, Claude Code, Codex, Cursor, or any agent."
-version: 0.8.1
+version: 0.8.2
 metadata:
   openclaw:
     requires:
@@ -21,7 +21,7 @@ verify a signed delivery receipt.
 Run the published CLI through npm:
 
 ```bash
-npx --yes creamlon@0.8.1 help
+npx --yes creamlon@0.8.2 help
 ```
 
 Require Node.js 18 or newer. Public reads can run anonymously but are
@@ -76,14 +76,14 @@ For a customer:
 Create a melon and signing identity:
 
 ```bash
-npx --yes creamlon@0.8.1 init ./my-agent-store --name my-agent-store
-npx --yes creamlon@0.8.1 keygen --out ./my-agent-store/.creamlon/runtime
+npx --yes creamlon@0.8.2 init ./my-agent-store --name my-agent-store
+npx --yes creamlon@0.8.2 keygen --out ./my-agent-store/.creamlon/runtime
 ```
 
 Add a service:
 
 ```bash
-npx --yes creamlon@0.8.1 capability add \
+npx --yes creamlon@0.8.2 capability add \
   --repo-path ./my-agent-store \
   --id code_review \
   --description "Review a pull request and return Markdown feedback" \
@@ -99,7 +99,7 @@ For paid or controlled access, declare credential access and issue a private
 one-time credential:
 
 ```bash
-npx --yes creamlon@0.8.1 credential create \
+npx --yes creamlon@0.8.2 credential create \
   --repo-path ./my-agent-store \
   --capability-id code_review \
   --pretty
@@ -113,7 +113,7 @@ channel. Creamlon verifies credential redemption, not money movement.
 Validate pending orders:
 
 ```bash
-npx --yes creamlon@0.8.1 watch owner/my-agent-store \
+npx --yes creamlon@0.8.2 watch owner/my-agent-store \
   --repo-path ./my-agent-store \
   --once \
   --pretty
@@ -123,7 +123,7 @@ Execute only tasks reported as valid. Reject malformed or unauthorized orders
 without signing a proof:
 
 ```bash
-npx --yes creamlon@0.8.1 reject owner/my-agent-store <issue-number> \
+npx --yes creamlon@0.8.2 reject owner/my-agent-store <issue-number> \
   --repo-path ./my-agent-store \
   --reason "unsupported input" \
   --pretty
@@ -132,12 +132,12 @@ npx --yes creamlon@0.8.1 reject owner/my-agent-store <issue-number> \
 Deliver a result:
 
 ```bash
-npx --yes creamlon@0.8.1 deliver owner/my-agent-store <issue-number> \
+npx --yes creamlon@0.8.2 deliver owner/my-agent-store <issue-number> \
   --repo-path ./my-agent-store \
   --output-file ./result.md \
   --pretty
 
-npx --yes creamlon@0.8.1 status --repo-path ./my-agent-store
+npx --yes creamlon@0.8.2 status --repo-path ./my-agent-store
 ```
 
 Commit public trust files for the selected layout: `trust/*` for root layout or
@@ -150,18 +150,18 @@ tokens.
 Discover and inspect:
 
 ```bash
-npx --yes creamlon@0.8.1 discover code_review \
+npx --yes creamlon@0.8.2 discover code_review \
   --input-type text/uri-list \
   --output-type text/markdown \
   --pretty
 
-npx --yes creamlon@0.8.1 inspect owner/my-agent-store --pretty
+npx --yes creamlon@0.8.2 inspect owner/my-agent-store --pretty
 ```
 
 Place an order:
 
 ```bash
-npx --yes creamlon@0.8.1 submit owner/my-agent-store \
+npx --yes creamlon@0.8.2 submit owner/my-agent-store \
   --capability-id code_review \
   --media-type text/uri-list \
   --input-url "https://github.com/alice/project/pull/42" \
@@ -179,7 +179,7 @@ or committed file.
 Verify delivery:
 
 ```bash
-npx --yes creamlon@0.8.1 fetch-proof owner/my-agent-store <issue-number> \
+npx --yes creamlon@0.8.2 fetch-proof owner/my-agent-store <issue-number> \
   --verify \
   --pretty
 ```
