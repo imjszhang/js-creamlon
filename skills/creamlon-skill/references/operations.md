@@ -22,7 +22,7 @@ When using `delivery-hpke-v2`:
 5. `fetch-proof --verify` after the Issue closes.
 6. `extension delivery fetch-output` — decrypt output, verify `proof.output_digest`, and verify Ed25519 proof by default.
 
-Keep `.creamlon/outbox/{request_id}.json` local (mode `0600`). Never commit
+Keep `.creamlon/runtime/outbox/{request_id}.json` local (mode `0600`). Never commit
 outbox files or print GET URLs, ephemeral private keys, or artifact plaintext.
 Compute digests with `creamlon hash --file`, which hashes raw bytes.
 
@@ -38,7 +38,7 @@ npx --yes creamlon@0.8.1 credential create \
 
 The caller passes the privately received complete value to
 `submit --credential`. The Issue contains only a task-bound HMAC. The node
-stores secrets in `.creamlon/credentials.json` and records successful
+stores secrets in `.creamlon/runtime/credentials.json` and records successful
 redemption in the node's public redemptions log.
 
 Use `credential list` to inspect status and `credential revoke <id>` to revoke
@@ -52,7 +52,7 @@ Free nodes need no key map. To require HMAC authorization, declare
 ```bash
 npx --yes creamlon@0.8.1 hmac-key-new \
   --key-id customer-1 \
-  --out .creamlon/authorization.keys.json
+  --out .creamlon/runtime/authorization.keys.json
 ```
 
 ## Recovery and audit

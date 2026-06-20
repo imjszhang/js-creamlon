@@ -48,7 +48,7 @@ default `root` layout writes `creamlon.yaml` and `trust/`; `bundled` writes
 `.creamlon/manifest.yaml` and `.creamlon/trust/`. Root layout requires an
 empty directory. Bundled layout can be added to an existing repository when
 Creamlon template target files do not already exist; it keeps an existing
-`README.md` and merges missing Creamlon private-state patterns into
+`README.md` and merges the `.creamlon/runtime/` private-state ignore rule into
 `.gitignore`.
 
 ## Local Manifest Commands
@@ -97,11 +97,13 @@ delivery tasks must upload output first with `extension delivery send-output`.
 `credential create --capability-id <id>` prints the full credential once.
 `credential list` omits secrets. `credential show <id>` prints the full local
 credential again. `credential gc` removes redeemed or expired local records.
+The default private store is `.creamlon/runtime/credentials.json`; existing
+`.creamlon/credentials.json` stores remain readable for migration.
 
 `hmac-key-new --key-id <id>` creates a private authorization key map.
 `hmac-key-list`, `hmac-key-revoke --key-id <id>`, and
 `hmac-key-rotate --key-id <id>` manage the private key ids without printing
-secrets.
+secrets. The default key map is `.creamlon/runtime/authorization.keys.json`.
 
 ## Proof And Trust Commands
 
@@ -123,6 +125,11 @@ continuity files.
 `extension delivery cleanup <owner/repo>` removes local state only for delivery
 records that reached local `closed` status with a stored proof and whose remote
 Issue is already closed.
+
+Node private runtime defaults live under `.creamlon/runtime/`: `private.key`,
+`delivery.private.b64url`, `deliveries/`, `outbox/`, `cache/`, and
+`deliver.lock`. Legacy private files directly under `.creamlon/` are still used
+when they already exist and the new runtime path does not.
 
 `extension delivery fetch-output` verifies the proof and output digest by
 default; `--no-verify` skips that verification only when you have another trust

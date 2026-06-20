@@ -22,17 +22,17 @@ Create a brand-new repository whose sole purpose is the agent service store:
 
 ```bash
 creamlon init ./my-melon --name my-melon
-creamlon keygen --out ./my-melon/.creamlon
+creamlon keygen --out ./my-melon/.creamlon/runtime
 ```
 
-Copy the generated public key into `creamlon.yaml`. Keep `.creamlon/` local
-and private — it is your operator back office.
+Copy the generated public key into `creamlon.yaml`. Keep `.creamlon/runtime/`
+local and private — it is your operator back office.
 
 ```text
 my-melon/
   creamlon.yaml          # public service catalog
   trust/                 # public delivery and trust records
-  .creamlon/             # private keys, credentials, caches (git-ignored)
+  .creamlon/runtime/     # private keys, credentials, caches (git-ignored)
 ```
 
 ### Option B — Add a melon to an existing repository
@@ -43,10 +43,11 @@ touching existing files:
 ```bash
 cd ./my-existing-repo
 creamlon init . --name my-existing-repo --layout bundled
-creamlon keygen --out .creamlon
+creamlon keygen --out .creamlon/runtime
 ```
 
-Everything goes under `.creamlon/`, similar to how `.github/` stores workflows:
+Public protocol files go under `.creamlon/`, similar to how `.github/` stores
+workflows; private operator state goes under `.creamlon/runtime/`:
 
 ```text
 my-existing-repo/
@@ -56,8 +57,7 @@ my-existing-repo/
     manifest.yaml        # public service catalog
     README.md            # orientation for agents without the CLI
     trust/               # public delivery and trust records
-    private.key          # git-ignored
-    credentials.json     # git-ignored
+    runtime/             # private keys, credentials, caches (git-ignored)
 ```
 
 The CLI keeps your root `README.md`, merges ignore rules into `.gitignore`,
@@ -198,8 +198,9 @@ creamlon status --repo-path ./my-melon
 Commit the public trust files for the layout you use: `trust/proofs.log` and
 `trust/status.json` for the root layout, or `.creamlon/trust/proofs.log` and
 `.creamlon/trust/status.json` for the bundled layout. Also commit the matching
-`redemptions.log` when credential redemptions occurred. Never commit credential
-stores, authorization key maps, delivery outboxes, or private keys.
+`redemptions.log` when credential redemptions occurred. Never commit
+`.creamlon/runtime/`, credential stores, authorization key maps, delivery
+outboxes, or private keys.
 
 ## Routine operations
 

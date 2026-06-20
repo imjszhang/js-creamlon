@@ -135,10 +135,10 @@ The credential returned by this vendor can also authorize a private
 ```bash
 creamlon caller inbox init --node owner/private-node
 creamlon caller inbox grant --node owner/private-node
-creamlon extension delivery prepare owner/private-node --outbox-dir ./.creamlon/outbox --pretty
+creamlon extension delivery prepare owner/private-node --outbox-dir ./.creamlon/runtime/outbox --pretty
 creamlon extension delivery draft \
   --task-file ./task.yaml \
-  --extensions-file ./.creamlon/outbox/<request-id>.extensions.json \
+  --extensions-file ./.creamlon/runtime/outbox/<request-id>.extensions.json \
   --request-id <request-id> \
   --capability-id code_review \
   --requester github:alice/private-inbox \
@@ -147,8 +147,8 @@ creamlon extension delivery draft \
 creamlon extension delivery send-input \
   --task-file ./task.yaml \
   --input-file ./input.txt \
-  --extensions-file ./.creamlon/outbox/<request-id>.extensions.json \
-  --outbox ./.creamlon/outbox/<request-id>.json \
+  --extensions-file ./.creamlon/runtime/outbox/<request-id>.extensions.json \
+  --outbox ./.creamlon/runtime/outbox/<request-id>.json \
   --receive-public-key <node-delivery-public-key>
 creamlon submit owner/private-node --task-file ./task.yaml --credential "crv1_..." --pretty
 ```

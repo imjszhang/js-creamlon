@@ -49,6 +49,6 @@ Protocol reference:
 
 ## Private Local State
 
-Do not commit private `.creamlon` state such as `private.key`,
-`credentials.json`, `authorization.keys.json`, `deliveries/`, `outbox/`, or
-`cache/`.
+Do not commit `.creamlon/runtime/`. It contains private operator state such as
+`private.key`, `credentials.json`, `authorization.keys.json`, `deliveries/`,
+`outbox/`, and `cache/`.

@@ -15,18 +15,21 @@ as public information.
 ## Layout boundary
 
 Root-layout melons keep public protocol files in `creamlon.yaml` and `trust/`,
-and private local state in `.creamlon/`.
+and private local state in `.creamlon/runtime/` under the ignored `.creamlon/`
+directory.
 
 Bundled-layout melons keep public protocol files in `.creamlon/manifest.yaml`
 and `.creamlon/trust/`. In that layout, do not ignore or publish the whole
 `.creamlon/` directory blindly; commit only the public manifest and trust
-records, and ignore private state by exact path.
+records, and ignore `.creamlon/runtime/`.
 
 ## Never publish
 
 - Ed25519 private keys
 - complete `crv1_...` credentials
-- `.creamlon/credentials.json`
+- `.creamlon/runtime/private.key`
+- `.creamlon/runtime/credentials.json`
+- `.creamlon/runtime/authorization.keys.json`
 - HMAC authorization key maps
 - GitHub tokens
 - private delivery outbox files, GET URLs, or plaintext artifacts

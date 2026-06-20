@@ -140,7 +140,7 @@ authorization from being reused with another node, credential, request,
 capability, input, or expiry.
 
 The node stores credential secrets privately in
-`.creamlon/credentials.json`. Successful redemption is recorded without the
+`.creamlon/runtime/credentials.json`. Successful redemption is recorded without the
 secret in `trust/redemptions.log`:
 
 ```json

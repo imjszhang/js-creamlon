@@ -45,7 +45,7 @@ extensions:
 Generate a node delivery key pair:
 
 ```bash
-creamlon extension delivery keygen --out .creamlon
+creamlon extension delivery keygen --out .creamlon/runtime
 ```
 
 Place `delivery.public.b64url` in `creamlon.yaml` as `receive_public_key`.
@@ -82,7 +82,7 @@ extensions:
 ```
 
 Issue exposes PUT URLs only. GET URLs and the caller ephemeral private key live
-in `.creamlon/outbox/{request_id}.json`.
+in `.creamlon/runtime/outbox/{request_id}.json`.
 
 For presigned input fetch, the node operator passes `--input-get-url` to
 `extension delivery fetch-input` through a private channel or storage policy that
@@ -181,7 +181,7 @@ deletion when the caller's GitHub plan supports protected private branches.
 
 ## Local outbox
 
-`.creamlon/outbox/{request_id}.json` (mode `0600`):
+`.creamlon/runtime/outbox/{request_id}.json` (mode `0600`):
 
 ```json
 {

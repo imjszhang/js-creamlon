@@ -40,11 +40,11 @@ Create a brand-new repository whose sole purpose is the agent service store:
 
 ```bash
 creamlon init ./my-melon --name my-melon
-creamlon keygen --out ./my-melon/.creamlon
+creamlon keygen --out ./my-melon/.creamlon/runtime
 ```
 
 Copy the generated public key into `./my-melon/creamlon.yaml`. Keep
-`.creamlon/` private; it is your operator back office.
+`.creamlon/runtime/` private; it is your operator back office.
 
 ### Option B — Add a melon to an existing repository
 
@@ -54,7 +54,7 @@ existing files:
 ```bash
 cd ./my-existing-repo
 creamlon init . --name my-existing-repo --layout bundled
-creamlon keygen --out .creamlon
+creamlon keygen --out .creamlon/runtime
 ```
 
 Copy the public key into `.creamlon/manifest.yaml`. The CLI keeps your root
@@ -86,8 +86,7 @@ files, and add the Topic `creamlon-node`.
 For the root layout, the repository must publish `creamlon.yaml` on its
 default branch. For the bundled layout, commit `.creamlon/manifest.yaml`,
 `.creamlon/README.md`, and `.creamlon/trust/`. Do not commit private
-`.creamlon/` state from your workstation (the root layout ignores the whole
-directory; the bundled layout ignores private files by exact path).
+`.creamlon/runtime/` state from your workstation.
 
 Now switch to the **buyer side** to see how a caller interacts with the melon.
 
@@ -160,7 +159,8 @@ creamlon status --repo-path ./my-melon
 ```
 
 Commit the updated `trust/` files (or `.creamlon/trust/` for bundled layout).
-Never commit private keys, credentials, delivery outboxes, or local caches.
+Never commit `.creamlon/runtime/`, private keys, credentials, delivery outboxes,
+or local caches.
 
 ## Verify delivery
 
