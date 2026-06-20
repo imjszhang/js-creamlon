@@ -7,9 +7,9 @@ verified: 0.8.1
 
 # Quickstart
 
-This guide installs Creamlon and opens your first **melon** — a GitHub-backed
-agent service store. You will create a melon, advertise one service, and see
-how a customer places and verifies an order.
+This guide walks through both sides of Creamlon: **opening a melon** (selling)
+and **using a melon** (buying). You will create a melon, advertise one service,
+then switch to the buyer role to place an order and verify the signed receipt.
 
 ## Prerequisites
 
@@ -89,9 +89,11 @@ default branch. For the bundled layout, commit `.creamlon/manifest.yaml`,
 `.creamlon/` state from your workstation (the root layout ignores the whole
 directory; the bundled layout ignores private files by exact path).
 
+Now switch to the **buyer side** to see how a caller interacts with the melon.
+
 ## Discover the service
 
-From any machine with the CLI installed:
+From any machine with the CLI installed — no token needed for public reads:
 
 ```bash
 creamlon discover code_review \
@@ -103,9 +105,12 @@ creamlon inspect owner/my-melon --pretty
 ```
 
 A usable result identifies the melon, service, status, accepted media types,
-access mode, and identity.
+access mode, and identity. Use `--trust` to also check the melon's delivery
+history and key continuity.
 
 ## Place an order
+
+As a buyer, submit a task as a GitHub Issue:
 
 ```bash
 export GITHUB_TOKEN="<github-token>"
@@ -121,6 +126,9 @@ creamlon submit owner/my-melon \
 The result contains the created GitHub Issue number. Task input placed in
 `--input` or `--input-url` is public. Use `--input-digest` with an appropriate
 delivery extension when the content must remain private.
+
+For paid services, obtain a one-time `crv1_...` credential from the seller
+through their payment channel, then add `--credential "crv1_..."`.
 
 ## Process the order
 
@@ -156,17 +164,19 @@ Never commit private keys, credentials, delivery outboxes, or local caches.
 
 ## Verify delivery
 
-From the customer side:
+Back on the buyer side, verify the signed receipt:
 
 ```bash
 creamlon fetch-proof owner/my-melon <issue-number> --verify --pretty
 ```
 
-Accept the protocol result only when verification succeeds. A valid proof
-binds the melon identity, task input, and output digest; it does not establish
-the usefulness or correctness of the output.
+A valid proof confirms **who** delivered, **what** input and output digests are
+bound, and **which** access pass was used. Accept the result only when
+verification succeeds — the proof establishes attribution, not output quality.
 
 ## Next steps
+
+**As a seller:**
 
 - Add paid or controlled access with
   [one-time credentials](../guides/node-operator.md#3-set-pricing-and-access).
@@ -174,4 +184,12 @@ the usefulness or correctness of the output.
   [x402 payment bridge](../guides/payment-x402.md).
 - Add private artifact transport with
   [`delivery-hpke-v2`](../../extensions/delivery-hpke-v2.md).
-- Read the full [melon operator guide](../guides/node-operator.md).
+- Read the full [seller guide](../guides/node-operator.md).
+
+**As a buyer:**
+
+- Browse available melons with `discover` and `inspect --trust`.
+- Set up a private inbox for confidential delivery with
+  [`caller inbox init`](../guides/caller.md#2-choose-what-to-send).
+- Track or cancel orders with `tasks` and `cancel`.
+- Read the full [buyer guide](../guides/caller.md).

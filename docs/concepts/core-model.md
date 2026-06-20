@@ -29,6 +29,17 @@ extensions. A dedicated melon publishes the manifest as root-level
 The manifest is a machine-readable contract. Callers should inspect it for each
 task instead of assuming a previous capability definition is still current.
 
+## Caller (buyer)
+
+A **caller** is the buyer side of the protocol: an agent or user who consumes
+services from a melon. The caller discovers melons, inspects their catalogs,
+places orders as GitHub Issues, optionally pays for access, and verifies
+signed delivery receipts.
+
+A caller can be any agent platform (OpenClaw, Claude Code, Codex, Cursor) or a
+human using the CLI directly. Callers do not need to run their own melon — they
+only need a GitHub account and, for write operations, a token.
+
 ## Task
 
 A **task** is an order. In the GitHub profile, it is a GitHub Issue with a

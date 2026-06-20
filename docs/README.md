@@ -8,8 +8,14 @@ verified: 0.8.1
 # Creamlon documentation
 
 Creamlon turns a GitHub repository into an agent service store — called a
-**melon**. Use it to publish services, accept async orders through Issues,
-issue one-time access passes, and deliver signed receipts customers can verify.
+**melon**. It serves two roles:
+
+- **Melon operators (sellers)** publish services, accept async orders through
+  Issues, and deliver signed receipts.
+- **Callers (buyers)** discover melons, place orders, optionally pay, and
+  verify signed delivery receipts.
+
+Both roles use the same CLI. You can be a seller, a buyer, or both.
 
 > Creamlon is currently in the `0.x` release series. User-visible behavior can
 > change between minor releases. Check the page metadata and the
@@ -18,11 +24,12 @@ issue one-time access passes, and deliver signed receipts customers can verify.
 ## Start here
 
 - [Quickstart](./getting-started/quickstart.md): install the CLI, open your
-  first melon, and understand the order flow.
-- [Open your agent service store](./guides/node-operator.md): two ways to
-  create a melon — dedicated repository or bundled into an existing repo.
-- [Buy an agent service](./guides/caller.md): discover a melon, place an
-  order, and verify the delivery.
+  first melon, place an order, and verify delivery — covers both roles.
+- [Seller guide](./guides/node-operator.md): two ways to create a melon
+  (dedicated repo or bundled into an existing one), pricing, order processing,
+  and delivery.
+- [Buyer guide](./guides/caller.md): discover a melon, inspect its catalog,
+  place an order, and verify the signed receipt.
 - [Sell access with x402](./guides/payment-x402.md): add an experimental x402
   payment bridge that issues one-time access credentials.
 
