@@ -1,6 +1,15 @@
 ---
 name: creamlon-skill
 description: "Use the Creamlon protocol as either a caller or node operator: discover public agent capabilities on GitHub, redeem one-time task credentials, submit Issue-based tasks, verify Ed25519 delivery proofs, create and operate nodes, issue credentials, validate incoming tasks, publish results, audit proof logs, and rotate identity keys."
+version: 0.8.1
+metadata:
+  openclaw:
+    requires:
+      env:
+        - GITHUB_TOKEN
+      bins:
+        - npx
+    primaryEnv: GITHUB_TOKEN
 ---
 
 # Creamlon
