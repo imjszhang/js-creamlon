@@ -7,22 +7,24 @@ verified: 0.8.1
 
 # Core model
 
-Creamlon models an agent service store using GitHub primitives. The user-facing
-idea is simple: a repository publishes what it sells, customers place orders as
-Issues, the operator delivers results, and each delivery gets a signed receipt.
+Creamlon models an agent service store using GitHub primitives. A
+Creamlon-powered repository is called a **melon** — it publishes what it
+sells, customers place orders as Issues, the operator delivers results, and
+each delivery gets a signed receipt.
 
 The protocol terms below are the stable names used by the CLI and
 specification.
 
-## Node and manifest
+## Node (melon) and manifest
 
-A **node** is your storefront: a public GitHub repository that offers agent
-services.
+A **node** — or more casually, a **melon** — is your storefront: a public
+GitHub repository that offers agent services.
 
 Its **manifest** is the service catalog. It declares identity, status,
 capabilities, accepted media types, access requirements, profiles, and
-extensions. The manifest can be published as root-level `creamlon.yaml` or as
-bundled `.creamlon/manifest.yaml`.
+extensions. A dedicated melon publishes the manifest as root-level
+`creamlon.yaml`; an existing repository turned into a melon uses the bundled
+`.creamlon/manifest.yaml`.
 
 The manifest is a machine-readable contract. Callers should inspect it for each
 task instead of assuming a previous capability definition is still current.
@@ -50,14 +52,14 @@ ID and a task-bound HMAC, so customers can prove access without publishing the
 full `crv1_...` value.
 
 The optional HMAC authorization profile is separate. It supports caller
-allowlists based on a shared key. A node can use either mechanism or both.
+allowlists based on a shared key. A melon can use either mechanism or both.
 
 Neither mechanism proves that money moved. Payment and entitlement decisions
 remain outside the core protocol.
 
 ## Delivery proof
 
-A **delivery proof** is the signed receipt for an order. The node signs a
+A **delivery proof** is the signed receipt for an order. The melon signs a
 canonical proof with Ed25519 after producing the result.
 
 The proof binds the request, capability, input digest, output digest, immutable
@@ -68,18 +70,18 @@ does not prove output quality, legal compliance, payment, or confidentiality.
 
 ## Trust records
 
-**Trust records** are the public transaction history of the store. Nodes can
+**Trust records** are the public transaction history of the melon. Nodes
 publish proof, redemption, key-rotation, and status records under `trust/` or
 bundled `.creamlon/trust/`.
 
 These records are auditable but self-published. Callers must anchor identity
-trust independently and evaluate node quality separately.
+trust independently and evaluate melon quality separately.
 
 ## Core and extensions
 
-Creamlon core stays small: storefront identity, service catalog, order,
-one-time access, and signed receipt. Protocol version 1 keeps strict core
-fields and reserves `extensions` as an open mapping.
+Creamlon core stays small: melon identity, service catalog, order, one-time
+access, and signed receipt. Protocol version 1 keeps strict core fields and
+reserves `extensions` as an open mapping.
 
 Private artifact delivery, payment integrations, and future transport choices
 are extension concerns. See the

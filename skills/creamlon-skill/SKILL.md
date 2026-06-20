@@ -38,11 +38,11 @@ artifacts.
 - The user wants to sell paid or controlled access to an agent capability.
 - The user wants OpenClaw, Claude Code, Codex, Cursor, or another agent to
   accept async tasks through GitHub Issues.
-- The user wants to place an order with another Creamlon node and later verify
-  a signed delivery proof.
+- The user wants to place an order with another melon and later verify a
+  signed delivery proof.
 - The user needs a GitHub-native transaction history for agent work.
-- The user asks about Creamlon, GAP, `creamlon.yaml`, `crv1_...`, signed
-  delivery proofs, or Creamlon nodes.
+- The user asks about Creamlon, GAP, melons, `creamlon.yaml`, `crv1_...`,
+  signed delivery proofs, or Creamlon nodes.
 
 ## When NOT To Use
 
@@ -66,14 +66,14 @@ For a store operator:
 
 For a customer:
 
-1. The customer discovers and inspects a node before ordering.
+1. The customer discovers and inspects a melon before ordering.
 2. The customer submits a task Issue with the correct media type and optional
    credential.
 3. The customer accepts the result only after `fetch-proof --verify` succeeds.
 
-## Open a Store
+## Open a Melon
 
-Create a node and signing identity:
+Create a melon and signing identity:
 
 ```bash
 npx --yes creamlon@0.8.1 init ./my-agent-store --name my-agent-store
@@ -92,8 +92,8 @@ npx --yes creamlon@0.8.1 capability add \
   --access free
 ```
 
-Publish the repository with Issues enabled and the Topic `creamlon-node`.
-Existing repositories can use `init . --layout bundled`.
+Publish the repository with Issues enabled and the Topic `creamlon-node`. To
+turn an existing repository into a melon instead, use `init . --layout bundled`.
 
 For paid or controlled access, declare credential access and issue a private
 one-time credential:

@@ -18,25 +18,26 @@ from this page's `verified` value.
 
 ## Authentication fails
 
-Most write operations act on a store repository or an order Issue.
+Most write operations act on a melon repository or an order Issue.
 Set `GITHUB_TOKEN` or `GH_TOKEN`, or pass `--token`. Confirm that the token can
 access the repository and perform the requested read, Issue, or content
 operation. Do not print the token while diagnosing the problem.
 
-## Discovery returns no nodes
+## Discovery returns no melons
 
-Discovery only lists repositories that are valid public service stores.
-Check that the node repository is public, non-forked, non-archived, has Issues
+Discovery only lists repositories that are valid public melons.
+Check that the melon repository is public, non-forked, non-archived, has Issues
 enabled, uses the `creamlon-node` Topic, and publishes a valid manifest at
 `creamlon.yaml` or `.creamlon/manifest.yaml`. Confirm capability ID, status,
 and media-type filters. Use `--refresh` to bypass the local discovery cache.
 
 ## Submission is rejected
 
-An order is rejected when it does not match the current service catalog.
+An order is rejected when it does not match the melon's current service catalog.
 Inspect the current manifest. Confirm the capability ID and media type, use
 exactly one input location, and provide expiry or access options required by
-the node. A credential must match the node, capability, task intent, and expiry.
+the melon. A credential must match the melon, capability, task intent, and
+expiry.
 
 ## A credential cannot be reused
 
@@ -55,24 +56,24 @@ manually edit redemption state. After recovery, run `audit` and refresh
 
 Treat the delivery receipt as untrusted until verification succeeds.
 Treat the result as unverified. Check the Issue number, repository, comment
-author, current or historical node identity, task input digest, output digest,
+author, current or historical melon identity, task input digest, output digest,
 credential binding, and key-rotation history.
 
 ## Private delivery fails
 
 Confirm both peers use the advertised delivery scheme and transport. Keep
-outbox state and private URLs local. Nodes must advertise
+outbox state and private URLs local. Melons must advertise
 `hpke-x25519-hkdf-sha256-aes256gcm-v2` (RFC 9180).
 
 For `github-private-repo`, a `403` or `404` during `fetch-input` or
-`send-output` usually means the node token cannot access the caller-owned
+`send-output` usually means the melon's token cannot access the caller-owned
 private inbox. Grant that token repository contents read/write access, or use
 `presigned-object-storage` to avoid standing cross-repository permissions.
 
 Run `creamlon caller inbox check --node owner/repo` with the caller token. If
 the operator permission is missing, confirm the invitation was accepted and
 that `profiles.github.operator` names a user rather than an organization. Use
-one inbox repository per node; path prefixes in a shared repository do not
+one inbox repository per melon; path prefixes in a shared repository do not
 limit collaborator write access.
 
 Run `creamlon caller inbox protect --node owner/repo` to block force-push and

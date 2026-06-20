@@ -7,9 +7,9 @@ verified: 0.8.1
 
 # Quickstart
 
-This guide installs Creamlon and opens a minimal GitHub-backed agent service
-store. You will create a node repository, advertise one service, and see how a
-customer would place and verify an order.
+This guide installs Creamlon and opens your first **melon** — a GitHub-backed
+agent service store. You will create a melon, advertise one service, and see
+how a customer places and verifies an order.
 
 ## Prerequisites
 
@@ -30,24 +30,44 @@ creamlon help
 
 The first line of the help output should report CLI version `0.8.1`.
 
-## Open a minimal service store
+## Open a melon
 
-Create a local node directory and generate its signing identity:
+There are two ways to create a melon. Pick the one that fits your situation.
+
+### Option A — Dedicated melon repository
+
+Create a brand-new repository whose sole purpose is the agent service store:
 
 ```bash
-creamlon init ./my-agent-store --name my-agent-store
-creamlon keygen --out ./my-agent-store/.creamlon
+creamlon init ./my-melon --name my-melon
+creamlon keygen --out ./my-melon/.creamlon
 ```
 
-Copy the generated public key into `./my-agent-store/creamlon.yaml` when the
-CLI asks you to do so. Keep `.creamlon/` private; it contains local operator
-state.
+Copy the generated public key into `./my-melon/creamlon.yaml`. Keep
+`.creamlon/` private; it is your operator back office.
+
+### Option B — Add a melon to an existing repository
+
+Already have a project or agent repo? Turn it into a melon without touching
+existing files:
+
+```bash
+cd ./my-existing-repo
+creamlon init . --name my-existing-repo --layout bundled
+creamlon keygen --out .creamlon
+```
+
+Copy the public key into `.creamlon/manifest.yaml`. The CLI keeps your root
+`README.md` and merges ignore rules into `.gitignore`.
+
+Both options produce a fully functional melon. The rest of this guide uses
+`my-melon` as the example path — adjust for bundled layout where needed.
 
 ## Add your first service
 
 ```bash
 creamlon capability add \
-  --repo-path ./my-agent-store \
+  --repo-path ./my-melon \
   --id code_review \
   --description "Review a pull request and return Markdown feedback" \
   --input-type text/uri-list \
@@ -58,13 +78,16 @@ creamlon capability add \
 This writes a machine-readable service catalog entry. Free access is the
 shortest first run; you can add one-time credentials or a payment bridge later.
 
-## Publish the store on GitHub
+## Publish the melon on GitHub
 
-Create a public GitHub repository for `my-agent-store`, enable Issues, push the
+Create a public GitHub repository for `my-melon`, enable Issues, push the
 files, and add the Topic `creamlon-node`.
 
-The repository must publish `creamlon.yaml` on its default branch. Do not commit
-the private `.creamlon/` state from your workstation.
+For the root layout, the repository must publish `creamlon.yaml` on its
+default branch. For the bundled layout, commit `.creamlon/manifest.yaml`,
+`.creamlon/README.md`, and `.creamlon/trust/`. Do not commit private
+`.creamlon/` state from your workstation (the root layout ignores the whole
+directory; the bundled layout ignores private files by exact path).
 
 ## Discover the service
 
@@ -76,18 +99,18 @@ creamlon discover code_review \
   --output-type text/markdown \
   --pretty
 
-creamlon inspect owner/my-agent-store --pretty
+creamlon inspect owner/my-melon --pretty
 ```
 
-A usable result identifies the repository, service, status, accepted media
-types, access mode, and node identity.
+A usable result identifies the melon, service, status, accepted media types,
+access mode, and identity.
 
 ## Place an order
 
 ```bash
 export GITHUB_TOKEN="<github-token>"
 
-creamlon submit owner/my-agent-store \
+creamlon submit owner/my-melon \
   --capability-id code_review \
   --media-type text/uri-list \
   --input-url "https://github.com/alice/project/pull/42" \
@@ -104,8 +127,8 @@ delivery extension when the content must remain private.
 On the operator machine:
 
 ```bash
-creamlon watch owner/my-agent-store \
-  --repo-path ./my-agent-store \
+creamlon watch owner/my-melon \
+  --repo-path ./my-melon \
   --once \
   --pretty
 ```
@@ -116,8 +139,8 @@ Markdown result file:
 ```bash
 printf "Looks good. Consider adding tests for edge cases.\n" > review.md
 
-creamlon deliver owner/my-agent-store <issue-number> \
-  --repo-path ./my-agent-store \
+creamlon deliver owner/my-melon <issue-number> \
+  --repo-path ./my-melon \
   --output-file ./review.md \
   --pretty
 ```
@@ -125,22 +148,22 @@ creamlon deliver owner/my-agent-store <issue-number> \
 Refresh and commit public trust records:
 
 ```bash
-creamlon status --repo-path ./my-agent-store
+creamlon status --repo-path ./my-melon
 ```
 
-Commit the updated `trust/` files. Never commit private keys, credentials,
-delivery outboxes, or local caches.
+Commit the updated `trust/` files (or `.creamlon/trust/` for bundled layout).
+Never commit private keys, credentials, delivery outboxes, or local caches.
 
 ## Verify delivery
 
 From the customer side:
 
 ```bash
-creamlon fetch-proof owner/my-agent-store <issue-number> --verify --pretty
+creamlon fetch-proof owner/my-melon <issue-number> --verify --pretty
 ```
 
 Accept the protocol result only when verification succeeds. A valid proof
-binds the node identity, task input, and output digest; it does not establish
+binds the melon identity, task input, and output digest; it does not establish
 the usefulness or correctness of the output.
 
 ## Next steps
@@ -151,4 +174,4 @@ the usefulness or correctness of the output.
   [x402 payment bridge](../guides/payment-x402.md).
 - Add private artifact transport with
   [`delivery-hpke-v2`](../../extensions/delivery-hpke-v2.md).
-- Read the full [store operator guide](../guides/node-operator.md).
+- Read the full [melon operator guide](../guides/node-operator.md).

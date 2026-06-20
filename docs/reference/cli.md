@@ -21,15 +21,15 @@ matches the documentation version you are reading.
 
 | Goal | Commands |
 | --- | --- |
-| Find and inspect service stores | `discover`, `inspect` |
+| Find and inspect melons | `discover`, `inspect` |
 | Manage your service catalog | `capability add`, `capability update`, `capability remove`, `capability list`, `payment set-provider`, `payment remove-provider`, `payment list`, `delivery set-config`, `delivery show-config`, `node set-status`, `node set-name`, `node set-description`, `validate` |
 | Place and verify orders | `submit`, `tasks`, `cancel`, `fetch-proof` |
-| Process order Issues | `watch`, `deliver`, `reject` |
-| Manage store identity | `keygen`, `key-rotate` |
+| Process orders | `watch`, `deliver`, `reject` |
+| Manage melon identity | `keygen`, `key-rotate` |
 | Manage access passes | `credential create`, `credential list`, `credential show`, `credential revoke`, `credential gc`, `hmac-key-new`, `hmac-key-list`, `hmac-key-revoke`, `hmac-key-rotate` |
 | Manage caller inboxes | `caller inbox init`, `caller inbox grant`, `caller inbox protect`, `caller inbox check`, `caller inbox revoke`, `caller inbox list`, `caller inbox remove` |
 | Work with signed receipts | `hash`, `sign`, `verify`, `proofs list`, `proofs show`, `audit`, `status` |
-| Create a store | `init` |
+| Create a melon | `init` |
 | Use private delivery | `extension delivery keygen`, `extension delivery prepare`, `extension delivery draft`, `extension delivery send-input`, `extension delivery fetch-input`, `extension delivery send-output`, `extension delivery fetch-output`, `extension delivery status`, `extension delivery cleanup` |
 
 ## Common Options
@@ -43,7 +43,7 @@ error output.
 
 ## Init Command
 
-`init <dir> [--name <name>] [--layout root|bundled]` scaffolds a node. The
+`init <dir> [--name <name>] [--layout root|bundled]` scaffolds a melon. The
 default `root` layout writes `creamlon.yaml` and `trust/`; `bundled` writes
 `.creamlon/manifest.yaml` and `.creamlon/trust/`. Root layout requires an
 empty directory. Bundled layout can be added to an existing repository when
@@ -53,7 +53,7 @@ Creamlon template target files do not already exist; it keeps an existing
 
 ## Local Manifest Commands
 
-`validate [--repo-path <dir>]` checks only the local node manifest. The CLI
+`validate [--repo-path <dir>]` checks only the local melon manifest. The CLI
 prefers `.creamlon/manifest.yaml` and falls back to `creamlon.yaml`.
 
 `capability add` requires `--id`, `--description`, `--input-type`, and
@@ -71,7 +71,7 @@ record `--resource-url`, `--price`, `--network`, `--asset`, `--pay-to`,
 `--github-input-path`, and `--github-output-path`.
 
 `node set-status <available|busy|offline>`, `node set-name <name>`, and
-`node set-description <text>` update node-level metadata.
+`node set-description <text>` update melon-level metadata.
 
 ## Task Commands
 
@@ -87,7 +87,7 @@ delivery tasks.
 and closes a task Issue only when the task body requester matches. Use
 `--reason <text>` to publish a caller-readable cancellation reason.
 
-`watch`, `deliver`, and `reject` are node-operator commands. `watch --once`
+`watch`, `deliver`, and `reject` are melon-operator commands. `watch --once`
 performs a single poll. `deliver` requires `--output-file`; use `--dry-run` to
 prepare without publishing and `--resume` after interruption. Extension
 delivery tasks must upload output first with `extension delivery send-output`.
@@ -137,7 +137,7 @@ lower rate limits.
 ## Stable sources
 
 - [Caller guide](../guides/caller.md)
-- [Node operator guide](../guides/node-operator.md)
+- [Melon operator guide](../guides/node-operator.md)
 - [Protocol specification](../../references/protocol.md)
 - [Extension specifications](../../extensions/README.md)
 

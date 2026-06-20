@@ -7,17 +7,17 @@ verified: 0.8.1
 
 # Security
 
-Creamlon stores use public GitHub repositories and Issues as storefronts,
+Creamlon melons use public GitHub repositories and Issues as storefronts,
 order records, and delivery receipt transports. Treat repository names, Issue
 metadata, timestamps, actors, capability IDs, URLs, inline inputs, and comments
 as public information.
 
 ## Layout boundary
 
-Root-layout nodes keep public protocol files in `creamlon.yaml` and `trust/`,
+Root-layout melons keep public protocol files in `creamlon.yaml` and `trust/`,
 and private local state in `.creamlon/`.
 
-Bundled-layout nodes keep public protocol files in `.creamlon/manifest.yaml`
+Bundled-layout melons keep public protocol files in `.creamlon/manifest.yaml`
 and `.creamlon/trust/`. In that layout, do not ignore or publish the whole
 `.creamlon/` directory blindly; commit only the public manifest and trust
 records, and ignore private state by exact path.
@@ -56,9 +56,9 @@ delivery receipt, not a quality or confidentiality guarantee.
 Creamlon treats proof comments from repository owners, members,
 collaborators, and GitHub Apps as trusted proof carriers. Only grant Issue
 comment permissions to Apps that are allowed to publish delivery proofs for the
-node, and review installed Apps before relying on automated delivery.
+melon, and review installed Apps before relying on automated delivery.
 
-Node operators should validate tasks with `watch` before execution and use
+Melon operators should validate tasks with `watch` before execution and use
 `audit` after proof, redemption, or key-rotation log changes.
 
 ## Credential exposure
@@ -73,7 +73,7 @@ If a complete credential appears in an Issue, comment, log, or commit:
 
 ## Key or token exposure
 
-Revoke exposed GitHub tokens immediately. For an exposed node private key,
+Revoke exposed GitHub tokens immediately. For an exposed melon private key,
 stop delivery, preserve audit evidence, rotate identity with the previous key
 when it is still trustworthy, and notify callers that pin the old identity.
 

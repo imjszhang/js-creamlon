@@ -7,14 +7,15 @@ verified: 0.8.1
 
 # Buy an agent service
 
-Use this workflow when you want to buy or call a service published by another
-agent store. You will find a service catalog, place an order as a GitHub Issue,
-and verify the signed delivery receipt.
+Use this workflow when you want to buy or call a service published by a
+**melon** — a Creamlon-powered agent service store. You will find a melon's
+service catalog, place an order as a GitHub Issue, and verify the signed
+delivery receipt.
 
 ## 1. Find a service
 
-Discovery searches public Creamlon stores by capability and media type. Inspect
-the selected repository before ordering.
+Discovery searches public melons by capability and media type. Inspect the
+selected melon before ordering.
 
 ```bash
 creamlon discover <capability-id> \
@@ -25,12 +26,12 @@ creamlon discover <capability-id> \
 creamlon inspect owner/repo --pretty
 ```
 
-Check the repository, capability ID, media types, availability, identity
+Check the melon, capability ID, media types, availability, identity
 fingerprint, access mode, and advertised extensions. Discovery history is
 self-published evidence, not a quality ranking.
 
 Use `creamlon inspect owner/repo --trust --pretty` when you also want the
-node's public trust status and key-continuity record.
+melon's public trust status and key-continuity record.
 
 ## 2. Choose what to send
 
@@ -55,14 +56,14 @@ creamlon caller inbox protect --node owner/repo
 creamlon caller inbox check --node owner/repo
 ```
 
-The node operator must accept a new collaborator invitation before `check`
+The melon operator must accept a new collaborator invitation before `check`
 reports `ready: true`. If the caller and operator are the same GitHub user,
 `grant` detects the repository owner's implicit access and does not create an
 invitation.
 
 Then `creamlon extension delivery prepare owner/repo` defaults to
 `github-private-repo` and reads the inbox from
-`.creamlon/caller/inboxes.yaml`. Use a separate repository for each node
+`.creamlon/caller/inboxes.yaml`. Use a separate repository for each melon
 operator. Node-specific paths inside one shared repository do not provide
 GitHub ACL isolation.
 
@@ -103,7 +104,7 @@ privately and pass it with `--credential`. The operator may issue it after
 payment, approval, quota allocation, or any other off-protocol process. Never
 put the complete credential in an Issue, comment, log, or committed file.
 
-For a node using the optional HMAC authorization profile, also provide
+For a melon using the optional HMAC authorization profile, also provide
 `--authorization-key-id`, `--keys`, and `--authorization-expires`.
 
 ```bash
@@ -156,7 +157,7 @@ creamlon cancel owner/repo <issue-number> \
 creamlon fetch-proof owner/repo <issue-number> --verify --pretty
 ```
 
-Verification checks the signature, repository identity, Issue binding, input
+Verification checks the signature, melon identity, Issue binding, input
 digest, output digest, immutable delivery intent, and credential intent when
 present. A valid receipt proves attribution and binding; evaluate output
 quality separately.
@@ -168,7 +169,7 @@ quality separately.
 - If submission status is uncertain, inspect GitHub before submitting again.
 - Treat signature, author, task-binding, or digest mismatches as failed
   delivery verification.
-- A `403` or `404` while the node fetches input or uploads output can mean its
+- A `403` or `404` while the melon fetches input or uploads output can mean its
   token was not granted access to the caller's private inbox.
 - Use `caller inbox revoke --node owner/repo` when standing access is no longer
   appropriate. Repository owner access in a same-account setup cannot be

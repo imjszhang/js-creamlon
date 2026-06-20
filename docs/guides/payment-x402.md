@@ -7,14 +7,13 @@ verified: 0.8.1
 
 # x402 payment bridge
 
-Use x402 when your agent service store should sell access directly to caller
-agents without a checkout account, invoice, or manual approval. x402 is one
-possible payment rail; Creamlon still verifies the one-time credential and
-delivery proof.
+Use x402 when your melon should sell access directly to caller agents without
+a checkout account, invoice, or manual approval. x402 is one possible payment
+rail; Creamlon still verifies the one-time credential and delivery proof.
 
-In store terms, the x402 resource server is the counter where a customer pays
-for one access pass. After settlement, it issues a private `crv1_...`
-credential that the customer uses when placing the GitHub Issue order.
+The x402 resource server is the counter where a customer pays for one access
+pass. After settlement, it issues a private `crv1_...` credential that the
+customer uses when placing the GitHub Issue order.
 
 This guide uses the [payment bridge pattern](../../extensions/payment-bridge-v1.md).
 The sample resource server lives in
@@ -23,16 +22,16 @@ examples are kept outside the npm package.
 
 ## Prerequisites
 
-- A Creamlon node repository with a credential-protected capability
-- A private `.creamlon/credentials.json` store owned by the node operator
+- A melon repository with a credential-protected capability
+- A private `.creamlon/credentials.json` store owned by the melon operator
 - An x402 facilitator that supports your selected network, asset, and payment
   scheme
 - An HTTPS endpoint where caller agents can reach the x402 resource server
 
 ## Advertise the provider
 
-Add payment discovery hints to the node manifest. Core ignores this section; it
-is for humans and agents choosing how to obtain a credential.
+Add payment discovery hints to the melon manifest. Core ignores this section;
+it is for humans and agents choosing how to obtain a credential.
 
 You can add the same hint with the CLI:
 
@@ -67,9 +66,9 @@ extensions:
 ```
 
 The `capability_id` field lets caller agents bind this provider hint to the
-matching Creamlon capability without parsing the URL path. Nodes with multiple
+matching Creamlon capability without parsing the URL path. Melons with multiple
 paid capabilities should publish one provider entry per priced capability. A
-provider without `capability_id` remains a node-level fallback for older or
+provider without `capability_id` remains a melon-level fallback for older or
 general checkout flows.
 
 The `resource_url` should still sell exactly one credential for the named
@@ -81,7 +80,7 @@ requirements, amounts, timeouts, and facilitator behavior.
 The example service is a small x402 resource server. It returns `402 Payment
 Required` for `/buy/<capability-id>`, verifies and settles the caller's
 `PAYMENT-SIGNATURE` header through a facilitator, then runs
-`creamlon credential create` against the node repository.
+`creamlon credential create` against the melon repository.
 
 ```bash
 cd examples/x402-credential-vendor
@@ -107,9 +106,9 @@ complete `crv1_...` credential after the facilitator accepts settlement.
 A caller agent reads the manifest, requests the advertised `resource_url`, and
 receives x402 payment requirements:
 
-When a node advertises multiple payment providers, prefer entries whose
+When a melon advertises multiple payment providers, prefer entries whose
 `capability_id` exactly matches the target capability. If no exact entry exists,
-fall back to node-level providers without `capability_id`.
+fall back to melon-level providers without `capability_id`.
 
 ```bash
 curl -i https://pay.example/buy/code_review
@@ -137,7 +136,7 @@ creamlon submit owner/code-review-node \
   --pretty
 ```
 
-The node processes the task normally. Delivery proofs and optional private
+The melon processes the task normally. Delivery proofs and optional private
 delivery extensions do not change.
 
 ## Private delivery composition
@@ -150,7 +149,7 @@ and output artifacts. A paid private task uses both:
    credential.
 2. Caller prepares private delivery, uploads encrypted input, and submits the
    resulting task file with that credential.
-3. Node verifies the credential during `watch`, decrypts input with
+3. Melon verifies the credential during `watch`, decrypts input with
    `fetch-input`, uploads encrypted output with `send-output`, and then runs
    `deliver`.
 4. Caller runs `fetch-output` and `fetch-proof --verify`.

@@ -8,23 +8,64 @@ verified: 0.8.1
 # Open your agent service store
 
 Use this guide when you want to sell or share an agent service from a GitHub
-repository. Creamlon calls that repository a **node**: it publishes your service
-catalog, receives orders as Issues, validates access, and signs delivery
-receipts.
+repository. A Creamlon-powered repository is called a **melon**: it publishes
+your service catalog, receives orders as Issues, validates access, and signs
+delivery receipts.
 
-## 1. Create your store
+## 1. Create your melon
 
-Start with a new store directory and generate the signing identity used for
-delivery receipts:
+There are two ways to create a melon. Pick the one that fits.
+
+### Option A — Dedicated melon repository
+
+Create a brand-new repository whose sole purpose is the agent service store:
 
 ```bash
-creamlon init ./my-node --name my-node
-creamlon keygen --out ./my-node/.creamlon
+creamlon init ./my-melon --name my-melon
+creamlon keygen --out ./my-melon/.creamlon
 ```
 
-Copy the generated public key into `creamlon.yaml`. Keep `.creamlon/` local and
-private when using the default root layout; it is your operator back office, not
-part of the public storefront.
+Copy the generated public key into `creamlon.yaml`. Keep `.creamlon/` local
+and private — it is your operator back office.
+
+```text
+my-melon/
+  creamlon.yaml          # public service catalog
+  trust/                 # public delivery and trust records
+  .creamlon/             # private keys, credentials, caches (git-ignored)
+```
+
+### Option B — Add a melon to an existing repository
+
+Already have a project, agent, or content repo? Turn it into a melon without
+touching existing files:
+
+```bash
+cd ./my-existing-repo
+creamlon init . --name my-existing-repo --layout bundled
+creamlon keygen --out .creamlon
+```
+
+Everything goes under `.creamlon/`, similar to how `.github/` stores workflows:
+
+```text
+my-existing-repo/
+  README.md              # your existing README
+  src/                   # your existing code
+  .creamlon/
+    manifest.yaml        # public service catalog
+    README.md            # orientation for agents without the CLI
+    trust/               # public delivery and trust records
+    private.key          # git-ignored
+    credentials.json     # git-ignored
+```
+
+The CLI keeps your root `README.md`, merges ignore rules into `.gitignore`,
+and never overwrites existing files.
+
+Both options produce a fully functional melon. See
+[node layout](../operations/node-layout.md) for the public/private file
+boundary in each layout.
 
 ## 2. Go live on GitHub
 
@@ -41,32 +82,18 @@ The repository must:
 Keep capability IDs, media types, access requirements, extension declarations,
 and status accurate because customers consume the manifest directly.
 
-The default root layout uses `creamlon.yaml` plus `trust/`. Existing
-repositories can instead use the bundled layout with `.creamlon/manifest.yaml`
-and `.creamlon/trust/`. Bundled nodes also publish `.creamlon/README.md` as a
-short entry point for external agents that can read GitHub files but have not
-installed the Creamlon CLI:
-
-```bash
-cd ./existing-repo
-creamlon init . --name existing-repo --layout bundled
-```
-
-See [node layout](../operations/node-layout.md) for the public/private file
-boundary in each layout.
-
-Use the local manifest commands for routine updates to an existing node:
+Use the local manifest commands for routine updates:
 
 ```bash
 creamlon capability add \
-  --repo-path ./my-node \
+  --repo-path ./my-melon \
   --id code_review \
   --description "Review code" \
   --input-type text/plain \
   --output-type text/markdown \
   --access credential
 
-creamlon node set-status busy --repo-path ./my-node
+creamlon node set-status busy --repo-path ./my-melon
 ```
 
 If the repository belongs to an organization, set the GitHub user that should
@@ -93,7 +120,7 @@ then create a credential:
 
 ```bash
 creamlon credential create \
-  --repo-path ./my-node \
+  --repo-path ./my-melon \
   --capability-id <capability-id> \
   --pretty
 ```
@@ -107,8 +134,8 @@ Run `watch` to read pending Issue orders and validate that they match your
 catalog, media types, access requirements, expiry, and optional extensions.
 
 ```bash
-creamlon watch owner/repo \
-  --repo-path ./my-node \
+creamlon watch owner/my-melon \
+  --repo-path ./my-melon \
   --once \
   --pretty
 ```
@@ -117,8 +144,8 @@ Execute only tasks reported as valid. Reject malformed, unauthorized, expired,
 or unsupported orders without signing a delivery proof.
 
 ```bash
-creamlon reject owner/repo <issue-number> \
-  --repo-path ./my-node \
+creamlon reject owner/my-melon <issue-number> \
+  --repo-path ./my-melon \
   --reason "unsupported input" \
   --pretty
 ```
@@ -133,8 +160,8 @@ contain `delivery.github.input_commit`; `fetch-input` reads that commit rather
 than the current branch head.
 
 ```bash
-creamlon extension delivery fetch-input owner/repo <issue-number> \
-  --repo-path ./my-node \
+creamlon extension delivery fetch-input owner/my-melon <issue-number> \
+  --repo-path ./my-melon \
   --output-file ./input.bin
 ```
 
@@ -145,11 +172,11 @@ The signed proof binds the request, input digest, output digest, credential
 intent, and delivery intent.
 
 ```bash
-creamlon extension delivery send-output owner/repo <issue-number> \
-  --repo-path ./my-node \
+creamlon extension delivery send-output owner/my-melon <issue-number> \
+  --repo-path ./my-melon \
   --output-file ./result.txt
-creamlon deliver owner/repo <issue-number> \
-  --repo-path ./my-node \
+creamlon deliver owner/my-melon <issue-number> \
+  --repo-path ./my-melon \
   --output-file ./result.txt \
   --pretty
 ```
@@ -162,10 +189,10 @@ If publication is interrupted, repeat with `--resume`. Delivery is designed to
 continue through the `prepared`, `commented`, `logged`, and `closed` states
 without redeeming a credential twice.
 
-After delivery, refresh store status and commit public trust records:
+After delivery, refresh melon status and commit public trust records:
 
 ```bash
-creamlon status --repo-path ./my-node
+creamlon status --repo-path ./my-melon
 ```
 
 Commit the public trust files for the layout you use: `trust/proofs.log` and
@@ -176,7 +203,7 @@ stores, authorization key maps, delivery outboxes, or private keys.
 
 ## Routine operations
 
-- Run `creamlon audit --repo-path ./my-node` after trust-log changes.
+- Run `creamlon audit --repo-path ./my-melon` after trust-log changes.
 - Use `credential list` and `credential revoke` without exposing secrets.
 - Record identity changes with `key-rotate` before discarding the old key.
 - Read [security guidance](../operations/security.md) before production use.

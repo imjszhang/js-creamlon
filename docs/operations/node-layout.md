@@ -7,54 +7,67 @@ verified: 0.8.1
 
 # Node layout
 
-Creamlon supports two public node layouts. The root layout remains the default
-created by `creamlon init`. Use it for a new service store. The bundled layout
-lets an existing repository add Creamlon store files under `.creamlon/` without
-moving unrelated project files.
+A Creamlon-powered repository — a **melon** — supports two public layouts.
+Choose the one that fits how you want to organize the store.
 
-## Root layout
+## Root layout — dedicated melon
 
 Use the root layout when the repository is primarily the agent service store.
+This is the default created by `creamlon init`.
+
+```bash
+creamlon init ./my-melon --name my-melon
+```
 
 ```text
-creamlon.yaml
-trust/
-  proofs.log
-  redemptions.log
-  key-rotations.log
-  status.json
-.creamlon/
-  private.key
-  credentials.json
-  authorization.keys.json
-  deliveries/
-  outbox/
-  cache/
+my-melon/
+  creamlon.yaml                    # public service catalog
+  trust/
+    proofs.log                     # public delivery proofs
+    redemptions.log                # public credential redemptions
+    key-rotations.log              # public identity rotations
+    status.json                    # public health status
+  .creamlon/                       # private (git-ignored)
+    private.key
+    credentials.json
+    authorization.keys.json
+    deliveries/
+    outbox/
+    cache/
 ```
 
 In the root layout, `creamlon.yaml` and `trust/*` are public committed files.
-The `.creamlon/` directory is local private state and should be ignored.
+The `.creamlon/` directory is local private state and should be ignored as a
+whole.
 
-## Bundled layout
+## Bundled layout — melon inside an existing repository
 
-Use the bundled layout when you are adding a Creamlon service store to an
-existing code, content, or agent repository.
+Use the bundled layout when you are adding melon capabilities to an existing
+code, content, or agent repository.
+
+```bash
+cd ./my-existing-repo
+creamlon init . --name my-existing-repo --layout bundled
+```
 
 ```text
-.creamlon/
-  README.md
-  manifest.yaml
-  trust/
-    proofs.log
-    redemptions.log
-    key-rotations.log
-    status.json
-  private.key
-  credentials.json
-  authorization.keys.json
-  deliveries/
-  outbox/
-  cache/
+my-existing-repo/
+  README.md                        # your existing README (untouched)
+  src/                             # your existing code
+  .creamlon/
+    manifest.yaml                  # public service catalog
+    README.md                      # orientation for agents without the CLI
+    trust/
+      proofs.log
+      redemptions.log
+      key-rotations.log
+      status.json
+    private.key                    # git-ignored by exact path
+    credentials.json               # git-ignored by exact path
+    authorization.keys.json        # git-ignored by exact path
+    deliveries/                    # git-ignored
+    outbox/                        # git-ignored
+    cache/                         # git-ignored
 ```
 
 In the bundled layout, `.creamlon/README.md`, `.creamlon/manifest.yaml`, and
@@ -62,18 +75,9 @@ In the bundled layout, `.creamlon/README.md`, `.creamlon/manifest.yaml`, and
 not have the Creamlon CLI a human-readable pointer to the manifest and GitHub
 Issue transport. Private keys, credential stores, authorization key maps,
 delivery state, outboxes, and caches remain private and must be ignored
-individually.
+individually — do not ignore the whole `.creamlon/` directory.
 
-Use this layout when the repository already has its own root-level structure
-and you want Creamlon protocol files grouped like `.github/`.
-
-To add Creamlon to an existing repository, run from the repository root:
-
-```bash
-creamlon init . --layout bundled
-```
-
-The command keeps an existing root `README.md`, merges missing Creamlon
+The `init` command keeps an existing root `README.md`, merges missing Creamlon
 private-state patterns into an existing `.gitignore`, and refuses to overwrite
 existing Creamlon template targets such as `.creamlon/README.md`,
 `.creamlon/manifest.yaml`, or `SKILL.md`.
@@ -90,7 +94,7 @@ Public trust files follow the same rule:
 1. `.creamlon/trust/<file>`
 2. `trust/<file>`
 
-This keeps existing nodes compatible while allowing new nodes to adopt the
+This keeps existing melons compatible while allowing new melons to adopt the
 bundled layout incrementally.
 
 ## Operator checklist
