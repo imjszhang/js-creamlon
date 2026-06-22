@@ -27,6 +27,7 @@ import {
   findInbox,
   readInboxRegistry,
 } from '../lib/inboxRegistry.mjs';
+import { assertInboxTargetIsNotNodeRepo } from '../lib/inboxSafety.mjs';
 import {
   assertOutboxMatchesTask,
   readOutbox,
@@ -168,6 +169,9 @@ export async function cmdExtensionDeliveryPrepare(positional, opts, { loadManife
       `no inbox registered for ${slug}; run caller inbox init --node ${slug} `
         + 'or pass --github-repo',
     );
+  }
+  if (transport === 'github-private-repo') {
+    assertInboxTargetIsNotNodeRepo(slug, github.repo);
   }
   if (transport === 'github-private-repo') {
     for (const [field, value] of [

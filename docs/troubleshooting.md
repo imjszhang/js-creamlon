@@ -76,6 +76,11 @@ that `profiles.github.operator` names a user rather than an organization. Use
 one inbox repository per melon; path prefixes in a shared repository do not
 limit collaborator write access.
 
+If setup reports that the inbox points at the node repository, create or select
+a separate caller-owned private inbox and run `caller inbox init` again. The
+delivery setup expects public Issues and trust records to stay on the melon
+repository while private artifacts move through the inbox repository.
+
 Run `creamlon caller inbox protect --node owner/repo` to block force-push and
 branch deletion where supported. A valid GitHub task must contain
 `delivery.github.input_commit`; missing revisions indicate that `send-input`

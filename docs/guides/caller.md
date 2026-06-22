@@ -61,6 +61,12 @@ reports `ready: true`. If the caller and operator are the same GitHub user,
 `grant` detects the repository owner's implicit access and does not create an
 invitation.
 
+The GitHub inbox is a separate caller-owned private repository for that melon.
+`caller inbox init`, `grant`, `check`, `protect`, and delivery preparation all
+expect the inbox repository to be distinct from the melon repository. If setup
+fails, use `caller inbox check --node owner/repo --pretty` and follow its
+reported state before continuing.
+
 Then `creamlon extension delivery prepare owner/repo` defaults to
 `github-private-repo` and reads the inbox from
 `.creamlon/caller/inboxes.yaml`. Use a separate repository for each melon

@@ -18,6 +18,7 @@ import {
   updateInboxRegistry,
   upsertInbox,
 } from '../lib/inboxRegistry.mjs';
+import { assertInboxTargetIsNotNodeRepo } from '../lib/inboxSafety.mjs';
 import { parseGithubRepo } from '../lib/extensions/delivery/transport-github.mjs';
 import { parseManifestDelivery } from '../lib/extensions/delivery/schema.mjs';
 
@@ -86,6 +87,7 @@ async function cmdInit(opts, ctx) {
   const inboxSlug = opts.githubRepo
     || existing?.repo
     || `github:${currentUser.login}/${defaultInboxName(node)}`;
+  assertInboxTargetIsNotNodeRepo(node, inboxSlug);
   const { owner, repo } = parseGithubRepo(inboxSlug);
 
   let repository;
@@ -145,6 +147,7 @@ async function cmdGrant(opts, ctx) {
   const registryPath = opts.registry || DEFAULT_INBOX_REGISTRY;
   const registry = await readInboxRegistry(registryPath, { optional: false });
   const entry = requireEntry(registry, node);
+  assertInboxTargetIsNotNodeRepo(node, entry.repo);
   if (entry.trust === 'blocked') fail(`inbox trust level blocks access for ${node}`, 4);
   const { owner, repo } = parseGithubRepo(entry.repo);
   await requireOperatorUser(entry.operator, token);
@@ -195,8 +198,24 @@ async function cmdCheck(opts, ctx) {
   if (!node) throw usageError('caller inbox check requires --node owner/repo');
   const token = requireToken(opts, ctx, 'caller inbox check');
   const registryPath = opts.registry || DEFAULT_INBOX_REGISTRY;
-  const registry = await readInboxRegistry(registryPath, { optional: false });
+  let registry;
+  try {
+    registry = await readInboxRegistry(registryPath, { optional: false });
+  } catch (error) {
+    if (error.message?.includes('inbox must be separate from node repository')) {
+      ctx.printJson({
+        ok: false,
+        node,
+        config_ok: false,
+        misconfigurations: ['inbox_repo_equals_node'],
+        recommendation: 'Run caller inbox init with a separate caller-owned private inbox repository.',
+      }, opts.pretty);
+      return;
+    }
+    throw error;
+  }
   const entry = requireEntry(registry, node);
+  assertInboxTargetIsNotNodeRepo(node, entry.repo);
   const { owner, repo } = parseGithubRepo(entry.repo);
   const repository = await getRepository(owner, repo, token);
   let operatorPermission = null;
@@ -278,6 +297,7 @@ async function cmdProtect(opts, ctx) {
   const registryPath = opts.registry || DEFAULT_INBOX_REGISTRY;
   const registry = await readInboxRegistry(registryPath, { optional: false });
   const entry = requireEntry(registry, node);
+  assertInboxTargetIsNotNodeRepo(node, entry.repo);
   const { owner, repo } = parseGithubRepo(entry.repo);
   try {
     await ensureInboxRuleset(owner, repo, entry.ref, token);
@@ -310,6 +330,7 @@ async function cmdRevoke(opts, ctx) {
   const registryPath = opts.registry || DEFAULT_INBOX_REGISTRY;
   const registry = await readInboxRegistry(registryPath, { optional: false });
   const entry = requireEntry(registry, node);
+  assertInboxTargetIsNotNodeRepo(node, entry.repo);
   const { owner, repo } = parseGithubRepo(entry.repo);
   if (owner.toLowerCase() === entry.operator.toLowerCase()) {
     ctx.printJson({

@@ -50,6 +50,13 @@ task isolation: a collaborator can still disrupt other paths at the branch
 head. Digest and signed delivery-intent verification prevent modified content
 from being accepted as the original task.
 
+Repository collaborator access for `github-private-repo` delivery is scoped to
+the caller-owned private inbox. The melon repository remains the public request
+surface and trust log, while private artifacts and standing cross-account write
+access live in the separate inbox repository. Creamlon rejects inbox registry
+entries and delivery preparation that bind the inbox to the same repository as
+the melon.
+
 ## Verify before accepting
 
 Customers should use `fetch-proof --verify` and reject signature, author,

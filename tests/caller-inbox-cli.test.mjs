@@ -1,6 +1,6 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { cmdCaller } from '../cli/callerInbox.mjs';
@@ -205,6 +205,67 @@ test('same-account inbox access does not add or remove the repository owner', as
   assert.ok(!calls.some((call) => call.path.includes('/collaborators/')));
   entry = findInbox(await readInboxRegistry(registryPath), base.node);
   assert.equal(entry.grant, 'owner-admin');
+});
+
+test('caller inbox refuses to use the node repository as the inbox target', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creamlon-unsafe-inbox-'));
+  const registryPath = join(dir, 'inboxes.yaml');
+  const calls = [];
+  setGithubFetch(async (url, init = {}) => {
+    const path = new URL(url).pathname;
+    calls.push({ path, method: init.method || 'GET' });
+    if (path === '/repos/bob/echo-node') {
+      return response(200, { owner: { login: 'bob', type: 'User' } });
+    }
+    if (path === '/users/bob') return response(200, { login: 'bob', type: 'User' });
+    if (path === '/user') return response(200, { login: 'alice' });
+    return response(404, { message: 'Not Found' });
+  });
+  const output = [];
+  const ctx = {
+    resolveToken: (opts) => opts.token,
+    loadManifestContext: async () => ({
+      owner: 'bob',
+      repo: 'echo-node',
+      parsed: { profiles: { github: { operator: 'bob' } } },
+    }),
+    printJson: (value) => output.push(value),
+  };
+
+  await assert.rejects(
+    () => cmdCaller(['caller', 'inbox', 'init'], {
+      node: 'bob/echo-node',
+      githubRepo: 'github:bob/echo-node',
+      registry: registryPath,
+      token: 'caller-token',
+    }, ctx),
+    /inbox must be separate from node repository/,
+  );
+  assert.ok(!calls.some((call) => call.method === 'POST' || call.method === 'PUT' || call.method === 'DELETE'));
+
+  await writeFile(registryPath, `version: "1"
+inboxes:
+  - node: bob/echo-node
+    operator: bob
+    repo: github:bob/echo-node
+`, 'utf8');
+  await assert.rejects(
+    () => cmdCaller(['caller', 'inbox', 'grant'], {
+      node: 'bob/echo-node',
+      registry: registryPath,
+      token: 'caller-token',
+    }, ctx),
+    /inbox must be separate from node repository/,
+  );
+  assert.ok(!calls.some((call) => call.path.includes('/collaborators/') || call.path.includes('/rulesets')));
+
+  await cmdCaller(['caller', 'inbox', 'check'], {
+    node: 'bob/echo-node',
+    registry: registryPath,
+    token: 'caller-token',
+  }, ctx);
+  assert.equal(output.at(-1).config_ok, false);
+  assert.deepEqual(output.at(-1).misconfigurations, ['inbox_repo_equals_node']);
 });
 
 test('caller inbox init requires an operator for organization-owned nodes', async () => {
