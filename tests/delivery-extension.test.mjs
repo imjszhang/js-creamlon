@@ -227,6 +227,34 @@ test('delivery prepare rejects unsafe GitHub path overrides', async () => {
   );
 });
 
+test('delivery prepare rejects a github inbox override pointing at the node', async () => {
+  const keys = generateDeliveryKeyPair();
+  await assert.rejects(
+    () => cmdExtensionDeliveryPrepare(
+      ['extension', 'delivery', 'prepare', 'bob/echo-node'],
+      {
+        githubRepo: 'github:bob/echo-node',
+        requestId: 'req-node-inbox',
+      },
+      {
+        loadManifestContext: async () => ({
+          parsed: {
+            extensions: {
+              delivery: {
+                scheme: 'hpke-x25519-hkdf-sha256-aes256gcm-v2',
+                receive_public_key: keys.public_key,
+                transports: ['github-private-repo'],
+              },
+            },
+          },
+        }),
+        printJson: () => {},
+      },
+    ),
+    /inbox must be separate from node repository/,
+  );
+});
+
 test('delivery prepare requires explicit consent for a trial inbox', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'creamlon-trial-prepare-'));
   const registryPath = join(dir, 'inboxes.yaml');

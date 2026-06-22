@@ -123,3 +123,23 @@ inboxes:
     /duplicate node/,
   );
 });
+
+test('caller inbox registry rejects an inbox bound to the node repository', () => {
+  assert.throws(
+    () => parseInboxRegistry(`version: "1"
+inboxes:
+  - node: bob/echo
+    operator: bob
+    repo: github:bob/echo
+`),
+    /inbox must be separate from node repository/,
+  );
+  assert.throws(
+    () => upsertInbox({ inboxes: [] }, {
+      node: 'bob/echo',
+      operator: 'bob',
+      repo: 'github:bob/echo',
+    }),
+    /inbox must be separate from node repository/,
+  );
+});
