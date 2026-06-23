@@ -12,6 +12,11 @@ repository. A Creamlon-powered repository is called a **melon**: it publishes
 your service catalog, receives orders as Issues, validates access, and signs
 delivery receipts.
 
+The recommended implementation example is the
+[Creamlon Postcard demo](./postcard-demo.md). It shows a bundled melon with a
+GitHub Pages checkout, one-time credential redemption, private inbox delivery,
+and public trust-log updates.
+
 ## 1. Create your melon
 
 There are two ways to create a melon. Pick the one that fits.

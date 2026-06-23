@@ -12,6 +12,10 @@ Use this workflow when you want to buy or call a service published by a
 service catalog, place an order as a GitHub Issue, and verify the signed
 delivery receipt.
 
+The primary end-to-end buyer example is the
+[Creamlon Postcard demo](./postcard-demo.md), which shows a credential-gated
+private prompt, private output delivery, and public proof verification.
+
 ## 1. Find a service
 
 Discovery searches public melons by capability and media type. Inspect the

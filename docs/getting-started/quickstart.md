@@ -11,6 +11,11 @@ This guide walks through both sides of Creamlon: **opening a melon** (selling)
 and **using a melon** (buying). You will create a melon, advertise one service,
 then switch to the buyer role to place an order and verify the signed receipt.
 
+For the main playable example, use the
+[Creamlon Postcard demo](../guides/postcard-demo.md). It runs the same core
+flow with a real public melon, one-time credentials, private inbox delivery, and
+signed proof verification.
+
 ## Prerequisites
 
 - Node.js 18 or newer

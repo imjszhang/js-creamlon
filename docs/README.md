@@ -25,6 +25,9 @@ Both roles use the same CLI. You can be a seller, a buyer, or both.
 
 - [Quickstart](./getting-started/quickstart.md): install the CLI, open your
   first melon, place an order, and verify delivery — covers both roles.
+- [Creamlon Postcard demo](./guides/postcard-demo.md): the primary playable
+  example, covering checkout, one-time credentials, private inbox delivery,
+  public Issue tasks, and signed proof verification.
 - [Seller guide](./guides/node-operator.md): two ways to create a melon
   (dedicated repo or bundled into an existing one), pricing, order processing,
   and delivery.
@@ -35,6 +38,8 @@ Both roles use the same CLI. You can be a seller, a buyer, or both.
 
 ## Understand Creamlon
 
+- [Main example: Creamlon Postcard](./guides/postcard-demo.md): a complete
+  credential-gated private delivery flow on GitHub.
 - [Core model](./concepts/core-model.md): melons, service catalogs, orders,
   access passes, signed receipts, and trust records.
 - [Protocol specification](../references/protocol.md): normative version 1
